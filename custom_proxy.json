@@ -3,7 +3,8 @@
 	"rules": [
 		{
 			"domain_suffix": [
-				".qichiyu.com"
+				".qichiyu.com",
+				".duckyci.com"
 			]
 		}
 	]

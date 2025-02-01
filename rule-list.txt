@@ -1,0 +1,74 @@
+# anti_ad
+https://ghfast.top/https://raw.githubusercontent.com/REIJI007/AdBlock_Rule_For_Sing-box/main/adblock_reject.srs
+
+# openai_geosite
+https://ghfast.top/https://github.com/SagerNet/sing-geosite/raw/refs/heads/rule-set/geosite-openai.srs
+
+# custom_direct
+https://ghfast.top/https://github.com/chisenin/rules-template/raw/refs/heads/main/custom_direct.json
+
+# private_geoip
+https://ghfast.top/https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geoip/private.srs
+
+# private_geosite
+https://ghfast.top/https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geosite/private.srs
+
+# aliyun_cn_geosite
+https://ghfast.top/https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geosite/aliyun.srs
+
+# cn_geoip
+https://ghfast.top/https://github.com/SagerNet/sing-geoip/raw/refs/heads/rule-set/geoip-cn.srs
+
+# cn_geosite
+https://ghfast.top/https://github.com/SagerNet/sing-geosite/raw/refs/heads/rule-set/geosite-cn.srs
+
+# github_geosite
+https://ghfast.top/https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geosite/github.srs
+
+# telegram_geoip
+https://ghfast.top/https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geoip/telegram.srs
+
+# telegram_geosite
+https://ghfast.top/https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geosite/telegram.srs
+
+# youtube_geosite
+https://ghfast.top/https://github.com/SagerNet/sing-geosite/raw/refs/heads/rule-set/geosite-youtube.srs
+
+# tiktok_geosite
+https://ghfast.top/https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geosite/tiktok.srs
+
+# microsoft_geosite
+https://ghfast.top/https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geosite/microsoft.srs
+
+# geosite_gemini
+https://ghfast.top/https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geosite/google-gemini.srs
+
+# google_geoip
+https://ghfast.top/https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geoip/google.srs
+
+# google_geosite
+https://ghfast.top/https://github.com/SagerNet/sing-geosite/raw/refs/heads/rule-set/geosite-google.srs
+
+# netflix_geoip
+https://ghfast.top/https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geoip/netflix.srs
+
+# netflix_geosite
+https://ghfast.top/https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geosite/netflix.srs
+
+# apple_geoip
+https://ghfast.top/https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo-lite/geoip/apple.srs
+
+# apple_geosite
+https://ghfast.top/https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geosite/apple.srs
+
+# claude_geosite
+https://ghfast.top/https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geosite/anthropic.srs
+
+# custom_proxy
+https://ghfast.top/https://github.com/chisenin/rules-template/raw/refs/heads/main/custom_proxy.json
+
+# aliyun_!cn_geosite
+https://ghfast.top/https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geosite/aliyun@!cn.srs
+
+# cn_geosite-geolocation
+https://ghfast.top/https://github.com/SagerNet/sing-geosite/raw/refs/heads/rule-set/geosite-geolocation-!cn.srs

@@ -2,14 +2,14 @@
 	"version": 1,
 	"rules": [
 		{
-			"domain_suffix": [
-				".qichiyu.com"
-			]
-		},
-		{
 			"domain": [
 				"monica.im"
 			]
-		}
+		},
+		{
+			"domain_suffix": [
+				".qichiyu.com"
+			]
+		}		
 	]
 }

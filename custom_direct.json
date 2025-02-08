@@ -3,7 +3,17 @@
 	"rules": [
 		{
 			"domain": [
-				"dash.duckyci.com"
+				"dash.duckyci.com",
+				"siliconflow.cn",
+				"qianfan.baidubce.com",
+				"ark.cn-beijing.volces.com"
+				
+			]
+		},
+		{
+			"domain_suffix": [
+				".deepseek.com",
+				".siliconflow.cn",
 			]
 		}
 	]

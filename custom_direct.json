@@ -7,14 +7,16 @@
 				"siliconflow.cn",
 				"qianfan.baidubce.com",
 				"ark.cn-beijing.volces.com",
-				"chat.qwenlm.ai"				
+				"chat.qwenlm.ai",
+				"openrouter.ai"
 			]
 		},
 		{
 			"domain_suffix": [
 				".deepseek.com",
 				".siliconflow.cn",
-				".tailscale.com"
+				".tailscale.com",
+				".openrouter.ai"
 			]
 		}
 	]

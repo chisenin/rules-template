@@ -3,13 +3,15 @@
 	"rules": [
 		{
 			"domain": [
-				"monica.im"
+				"monica.im",
+				"groq.com"
 			]
 		},
 		{
 			"domain_suffix": [
 				".qichiyu.com",
-				".genspark.ai"
+				".genspark.ai",
+				".groq.com"
 			]
 		}		
 	]

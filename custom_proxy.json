@@ -4,14 +4,16 @@
 		{
 			"domain": [
 				"monica.im",
-				"groq.com"
+				"groq.com",
+				"grok.com"
 			]
 		},
 		{
 			"domain_suffix": [
 				".qichiyu.com",
 				".genspark.ai",
-				".groq.com"
+				".groq.com",
+				".grok.com"
 			]
 		}		
 	]

@@ -38,10 +38,10 @@ jobs:
             url="${raw_url%%[#?]*}"
             path_parts=($(echo "$url" | awk -F/ '{for(i=1;i<=NF;i++) if($i!="") print $i}'))
             
-            # 生成路径特征码
-            if [ ${#path_parts[@]} -ge ${{ env.PATH_SEGMENTS} } ]; then
-              start_idx=$(( ${#path_parts[@]} - ${{ env.PATH_SEGMENTS} } ))
-              signature=$(IFS=_ ; echo "${path_parts[*]:$start_idx:${{ env.PATH_SEGMENTS} }}")
+            # 生成路径特征码（修复变量引用）
+            if [ ${#path_parts[@]} -ge ${{ env.PATH_SEGMENTS }} ]; then
+              start_idx=$(( ${#path_parts[@]} - ${{ env.PATH_SEGMENTS }} ))
+              signature=$(IFS=_ ; echo "${path_parts[*]:$start_idx:${{ env.PATH_SEGMENTS }}}")
             else
               signature="${path_parts[-1]}"
             fi

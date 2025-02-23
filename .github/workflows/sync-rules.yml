@@ -1,41 +1,74 @@
-name: Regex-Fixed Rules Sync
+name: Sync Rules Files
+
 on:
+  # 触发条件1：手动触发
   workflow_dispatch:
+  
+  # 触发条件2：每天凌晨4点自动触发
+  schedule:
+    - cron: "0 4 * * *"
+
+  # 触发条件3：rules-list.txt 文件变动时触发
   push:
     paths:
       - 'rules-list.txt'
-  schedule:
-    - cron: '0 4 * * *'
 
+# 配置变量，方便修改和扩展
 env:
-  URL_LIST_FILE: 'rules-list.txt'
-  TARGET_DIR: 'rules'
-  PATH_SEGMENTS: 2
+  URL_LIST_FILE: rules-list.txt       # 列表文件名
+  OUTPUT_DIR: rules                   # 输出文件夹名
 
 jobs:
-  sync-rules:
+  sync-files:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-        with:
-          path: repo
+      # 检出代码仓库
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Process URLs
-        working-directory: ./repo
+      # 读取 rules-list.txt 文件中的 URL 列表，并过滤掉注释行和空行
+      - name: Read and filter URL list
+        id: read_urls
         run: |
-          # 修复的正则表达式语法
-          while IFS= read -r raw_url || [[ -n "$raw_url" ]]; do
-            # 使用兼容性更好的条件判断
-            if [[ "$raw_url" =\~ ^#.*$ || -z "${raw_url// }" ]]; then
-              echo "跳过注释/空行: ${raw_url:0:20}..."
-              continue
-            fi
+          # 过滤掉注释行（以 # 开头的行）和空行，并将有效 URL 存储到数组中
+          mapfile -t urls < <(grep -v '^#' "${{ env.URL_LIST_FILE }}" | awk 'NF')
+          echo "URLs=${urls[@]}" >> $GITHUB_ENV
 
-            # URL清洗（兼容特殊字符）
-            clean_url=$(echo "$raw_url" | awk '{sub(/^[ \t]+/, ""); sub(/[ \t]+$/, ""); print}')
+      # 下载并处理文件
+      - name: Download and process files
+        run: |
+          mkdir -p "${{ env.OUTPUT_DIR }}"  # 确保输出目录存在
+          
+          # 遍历每个 URL
+          for url in ${{ env.URLS }}; do
+            # 提取 URL 的最后一段路径作为前缀
+            prefix=$(echo "$url" | awk -F'/' '{print $(NF-1)}')
+            filename=$(basename "$url")
             
-            # 路径处理逻辑...
-            output_path="${{ env.TARGET_DIR }}/$safe_name"
+            # 构造新的文件名
+            new_filename="${prefix}-${filename}"
             
-            curl --retry 3 -fL "$clean_url" -o "$output_path"
-          done < "${{ env.URL_LIST_FILE }}"
+            # 下载文件到指定目录
+            curl -sSL "$url" -o "${{ env.OUTPUT_DIR }}/$new_filename"
+            
+            echo "Downloaded $url as $new_filename"
+          done
+
+      # 提交更改到仓库
+      - name: Commit changes
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          
+          # 添加新文件到暂存区
+          git add "${{ env.OUTPUT_DIR }}/*"
+          
+          # 检查是否有更改需要提交
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            # 提交更改
+            git commit -m "Automated update of rules files"
+            git push
+          fi

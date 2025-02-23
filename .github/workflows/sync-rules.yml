@@ -1,4 +1,4 @@
-name: Smart Rules Sync
+name: Reliable Rules Sync
 on:
   workflow_dispatch:
   push:
@@ -9,33 +9,61 @@ on:
 
 env:
   URL_LIST_FILE: 'rules-list.txt'
-  TARGET_DIR: 'rules'
+  TARGET_DIR: 'rules'  # 明确目标目录名
   PATH_SEGMENTS: 2
 
 jobs:
   sync-rules:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
-          path: repo
+          path: repo  # 指定检出到repo子目录
+
+      - name: Initialize workspace
+        run: |
+          # 在repo目录下创建目标文件夹
+          mkdir -p "${{ github.workspace }}/repo/${{ env.TARGET_DIR }}"
+          echo "目标目录绝对路径：${{ github.workspace }}/repo/${{ env.TARGET_DIR }}"
 
       - name: Process URLs
-        working-directory: repo
+        working-directory: ${{ github.workspace }}/repo  # 锁定工作目录
         run: |
           error_log="sync_errors_$(date +%s).log"
           total=0
           success=0
           failure=0
 
+          # URL编码处理函数
+          urlencode() {
+            local string="${1}"
+            local strlen=${#string}
+            local encoded=""
+            local pos c o
+
+            for (( pos=0 ; pos<strlen ; pos++ )); do
+               c=${string:$pos:1}
+               case "$c" in
+                   [-_.\~a-zA-Z0-9] ) o="${c}" ;;
+                   * )               printf -v o '%%%02x' "'$c"
+               esac
+               encoded+="${o}"
+            done
+            echo "${encoded}"
+          }
+
           while IFS= read -r raw_url; do
             ((total++))
             [[ -z "$raw_url" || "$raw_url" == \#* ]] && continue
 
-            # URL清洗和验证
-            clean_url=$(echo "$raw_url" | awk '{print $1}' | xargs)
-            if ! curl --head --fail -sS "$clean_url" &>/dev/null; then
-              echo "::warning::无效URL跳过: $clean_url"
+            # 严格URL清洗
+            clean_url=$(echo "$raw_url" | awk '{print $1}' | sed 's/[[:space:]]*$//; s/^[[:space:]]*//')
+            encoded_url=$(urlencode "$clean_url")
+
+            # URL有效性验证
+            if ! curl --head --fail -sS "$encoded_url" >/dev/null 2>&1; then
+              echo "::error::无效URL: $clean_url → 跳过"
               echo "[INVALID] $clean_url" >> "$error_log"
               ((failure++))
               continue
@@ -44,6 +72,7 @@ jobs:
             # 文件名生成逻辑
             url_path="${clean_url%/*}"
             path_parts=($(echo "$url_path" | awk -F/ '{for(i=4;i<=NF;i++) print $i}'))
+            
             if [ ${#path_parts[@]} -ge ${{ env.PATH_SEGMENTS }} ]; then
               signature=$(IFS=_ ; echo "${path_parts[*]: -${{ env.PATH_SEGMENTS }}}")
             else
@@ -54,15 +83,25 @@ jobs:
             safe_name=$(echo "$safe_name" | tr -cd 'a-zA-Z0-9_.-')
             output_path="${{ env.TARGET_DIR }}/$safe_name"
 
-            # 带重试的下载
-            if curl --retry 2 --retry-delay 3 -fL "$clean_url" -o "$output_path"; then
-              ((success++))
-              echo "✅ 成功: $safe_name"
-            else
-              echo "::error::下载失败: $clean_url"
-              echo "[FAILED] $clean_url" >> "$error_log"
-              ((failure++))
-            fi
+            # 带重试机制的下载
+            echo "🔄 正在下载: $safe_name"
+            for i in {1..3}; do
+              if curl -fL "$encoded_url" -o "$output_path"; then
+                ((success++))
+                echo "✅ 下载成功: $output_path"
+                break
+              else
+                if [ $i -eq 3 ]; then
+                  echo "::error::最终下载失败: $clean_url"
+                  echo "[FAILED] $clean_url" >> "$error_log"
+                  ((failure++))
+                  rm -f "$output_path"
+                else
+                  echo "⚠️ 第 $i 次重试: $clean_url"
+                  sleep $((i*2))
+                fi
+              fi
+            done
           done < "${{ env.URL_LIST_FILE }}"
 
           # 结果处理
@@ -71,26 +110,35 @@ jobs:
           echo "failure=$failure" >> $GITHUB_OUTPUT
 
           if [ $failure -gt 0 ]; then
-            echo "::warning::同步完成，但有 $failure 个失败项"
-            exit 1  # 失败时标记任务异常
+            echo "::warning::同步完成，失败项: $failure"
+            exit 1
           fi
+
+      - name: Verify downloaded files
+        working-directory: ${{ github.workspace }}/repo
+        run: |
+          echo "=== 文件验证 ==="
+          echo "目标目录内容:"
+          ls -l "${{ env.TARGET_DIR }}"
+          echo "总文件数: $(ls "${{ env.TARGET_DIR }}" | wc -l)"
 
       - name: Commit changes
-        working-directory: repo
-        if: success() || failure()  # 即使有失败也提交
+        working-directory: ${{ github.workspace }}/repo
         run: |
-          if [ -n "$(git status --porcelain)" ]; then
-            git config user.name "Auto Sync"
-            git config user.email "auto@sync"
+          if [ $(git status --porcelain "${{ env.TARGET_DIR }}" | wc -l) -gt 0 ]; then
+            git config user.name "Auto Sync Bot"
+            git config user.email "bot@sync"
             git add "${{ env.TARGET_DIR }}"
-            git commit -m "🔄 更新规则（成功${{ steps.sync-rules.outputs.success }}，失败${{ steps.sync-rules.outputs.failure }}）"
+            git commit -m "🔄 同步规则文件 [成功${{ steps.sync-rules.outputs.success }}]"
             git push
+            echo "::notice::已提交 ${{ steps.sync-rules.outputs.success }} 个新文件"
+          else
+            echo "::notice::无新增文件需要提交"
           fi
 
-      - name: Upload error report
+      - name: Upload error logs
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: sync-error-report
-          path: |
-            repo/${{ env.TARGET_DIR }}_errors.log
+          path: ${{ github.workspace }}/repo/*.log

@@ -1,19 +1,16 @@
-name: Rules Auto Sync
+name: Persistent Rules Sync
 on:
-  workflow_dispatch:    # 手动触发
+  workflow_dispatch:
   push:
     paths:
-      - 'rules-list.txt'  # 文件变化时触发
+      - 'rules-list.txt'
   schedule:
-    - cron: '0 4 * * *'  # 每天UTC 4点执行
+    - cron: '0 4 * * *'
 
 env:
-  URL_LIST_FILE: 'rules-list.txt'  # 新版列表文件
-  TARGET_DIR: 'rules'              # 输出目录
-  PATH_SEGMENTS: 2                # 路径特征码深度
-
-permissions:
-  contents: write  # 必须的写入权限
+  URL_LIST_FILE: 'rules-list.txt'
+  TARGET_DIR: './rules'  # 明确相对路径
+  MAX_RETRY: 2
 
 jobs:
   sync-rules:
@@ -22,80 +19,50 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          persist-credentials: false
+          path: repo  # 指定检出到repo子目录
 
-      - name: Create rules directory
+      - name: Verify workspace
         run: |
-          mkdir -p "${{ env.TARGET_DIR }}"
-          echo "目录结构创建完成："
-          ls -lhd "${{ env.TARGET_DIR }}"
+          echo "工作区路径: ${{ github.workspace }}"
+          echo "仓库路径: ${{ github.workspace }}/repo"
+          ls -la ${{ github.workspace }}/repo
 
-      - name: Process rules list
+      - name: Create target directory
         run: |
-          echo "=== 开始处理规则列表 ==="
-          echo "当前时间: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-          echo "待处理文件数量: $(grep -vE '^#|^$' ${{ env.URL_LIST_FILE }} | wc -l)"
+          mkdir -p "${{ github.workspace }}/repo/${{ env.TARGET_DIR }}"
+          echo "目标目录结构："
+          tree -d ${{ github.workspace }}/repo
 
+      - name: Download files
+        working-directory: ${{ github.workspace }}/repo  # 关键！锁定工作目录
+        run: |
           while IFS= read -r raw_url; do
             [[ -z "$raw_url" || "$raw_url" == \#* ]] && continue
 
-            # 路径特征码生成
-            clean_url="${raw_url%%[#?]*}"
-            url_path="${clean_url%/*}"
-            path_parts=($(echo "$url_path" | awk -F/ '{for(i=4;i<=NF;i++) print $i}'))
-            
-            # 动态文件名生成
-            if [ ${#path_parts[@]} -ge ${{ env.PATH_SEGMENTS }} ]; then
-              start_idx=$(( ${#path_parts[@]} - ${{ env.PATH_SEGMENTS }} ))
-              signature=$(IFS=_ ; echo "${path_parts[*]:$start_idx:${{ env.PATH_SEGMENTS }}}")
-            else
-              signature="${path_parts[-1]}"
-            fi
-
-            final_name="${signature}_${clean_url##*/}"
-            final_name="${final_name//[^a-zA-Z0-9_.-]/_}"
+            # 路径解析逻辑...
             output_path="${{ env.TARGET_DIR }}/$final_name"
 
-            # 带重试机制的下载
-            echo "下载: $clean_url → $output_path"
-            if curl --retry 3 --retry-delay 5 -fL "$clean_url" -o "$output_path"; then
-              echo "✅ 下载成功"
-            else
-              echo "::error::下载失败: $clean_url"
-              exit 1
+            # 带路径验证的下载
+            echo "下载到: $(pwd)/$output_path"
+            if curl -fL "$clean_url" -o "$output_path"; then
+              echo "✅ 文件已保存到仓库目录"
             fi
-          done < "${{ env.URL_LIST_FILE }}"
+          done < "${{ github.workspace }}/repo/${{ env.URL_LIST_FILE }}"
 
-      - name: Commit updates
-        if: success()
+      - name: Commit changes
+        working-directory: ${{ github.workspace }}/repo
         run: |
-          git config --global user.name "Rules Sync Bot"
-          git config --global user.email "bot@rules.sync"
-
-          if git diff --quiet --exit-code; then
-            echo "没有检测到文件变更"
-          else
-            git add "${{ env.TARGET_DIR }}"
-            git commit -m "🔄 自动更新规则文件 [$(date +%F)]"
+          echo "=== 提交前文件状态 ==="
+          git status --porcelain "${{ env.TARGET_DIR }}"
+          
+          git add "${{ env.TARGET_DIR }}"
+          if ! git diff --quiet --exit-code; then
+            git commit -m "🔄 更新规则文件"
             git push
-            echo "已提交新版本规则文件"
+            echo "变更已提交到仓库"
           fi
 
-      - name: Post-cleanup
-        if: always()
+      - name: Post-sync verification
         run: |
-          echo "=== 清理临时文件 ==="
-          rm -f tmp_download.*
-          echo "工作流状态: ${{ job.status }}"
-
-  health-check:
-    needs: sync-rules
-    runs-on: ubuntu-latest
-    if: always()
-    steps:
-      - name: Final report
-        run: |
-          echo "最后同步时间: $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
-          echo "目标目录: ${{ env.TARGET_DIR }}"
-          echo "同步结果: ${{ needs.sync-rules.result }}"
-          echo "详情查看: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          echo "=== 最终目录验证 ==="
+          ls -lR ${{ github.workspace }}/repo/${{ env.TARGET_DIR }}

@@ -6,7 +6,7 @@ on:
 
 # ================= 用户配置区 =================
 env:
-  URL_LIST_FILE: 'url-list.txt'     # URL列表文件
+  URL_LIST_FILE: 'rule-list.txt'     # URL列表文件
   TARGET_BASE_DIR: 'rules' # 存储目录
   PATH_SEGMENTS: 2                 # 使用最后N段路径作为特征码 (推荐2)
 # ==============================================

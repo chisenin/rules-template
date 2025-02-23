@@ -40,8 +40,12 @@ jobs:
         run: |
           mkdir -p "${{ env.OUTPUT_DIR }}"  # 确保输出目录存在
           
-          # 遍历每个 URL
-          for url in ${{ env.URLS }}; do
+          # 将 URLs 字符串转换为换行符分隔的列表
+          echo "${{ env.URLS }}" | tr ' ' '\n' | while read -r url; do
+            if [ -z "$url" ]; then
+              continue
+            fi
+            
             # 提取 URL 的最后一段路径作为前缀
             prefix=$(echo "$url" | awk -F'/' '{print $(NF-1)}')
             filename=$(basename "$url")

@@ -1,4 +1,4 @@
-name: Smart File Sync with Path Encoding
+name: Auto File Sync with Path Encoding
 on:
   workflow_dispatch:
   schedule:
@@ -6,9 +6,9 @@ on:
 
 # ================= 用户配置区 =================
 env:
-  URL_LIST_FILE: 'rules-list.txt'
-  TARGET_BASE_DIR: 'rules'
-  PATH_SEGMENTS: 2
+  URL_LIST_FILE: 'rules-list.txt'     # URL列表文件路径
+  TARGET_BASE_DIR: 'rules'   # 存储目录
+  PATH_SEGMENTS: 2                 # 路径特征码深度
 # ==============================================
 
 permissions:
@@ -18,22 +18,26 @@ jobs:
   file-sync:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Prepare workspace
         run: |
           mkdir -p "${{ env.TARGET_BASE_DIR }}"
           rm -rf ./sync-logs && mkdir ./sync-logs
 
-      - name: Download files
+      - name: Process URLs
         run: |
           while IFS= read -r raw_url; do
             [[ -z "$raw_url" || "$raw_url" == \#* ]] && continue
             
+            # 清洗URL并分割路径
             url="${raw_url%%[#?]*}"
             path_parts=($(echo "$url" | awk -F/ '{for(i=1;i<=NF;i++) if($i!="") print $i}'))
             
+            # 生成路径特征码
             if [ ${#path_parts[@]} -ge ${{ env.PATH_SEGMENTS }} ]; then
               start_idx=$(( ${#path_parts[@]} - ${{ env.PATH_SEGMENTS }} ))
               signature=$(IFS=_ ; echo "${path_parts[*]:$start_idx:${{ env.PATH_SEGMENTS }}}")
@@ -41,17 +45,19 @@ jobs:
               signature="${path_parts[-1]}"
             fi
 
+            # 构建安全文件名
             original_name="${url##*/}"
             safe_name="${signature}_${original_name}"
             safe_name="${safe_name//[^a-zA-Z0-9_.-]/_}"
             
+            # 下载文件
             output_path="${{ env.TARGET_BASE_DIR }}/$safe_name"
-            echo "下载: $url → $output_path"
+            echo "▶️ 正在同步: $url → $output_path"
             
-            if curl -fL "$url" -o "$output_path"; then
+            if curl -fsSL "$url" -o "$output_path"; then
               echo "[SUCCESS] $(date +%FT%T) $url" >> ./sync-logs/success.log
             else
-              echo "[FAILED] $(date +%FT%T) $url" >> ./sync-logs/error.log
+              echo "[FAILED]  $(date +%FT%T) $url" >> ./sync-logs/error.log
               exit 1
             fi
           done < "${{ env.URL_LIST_FILE }}"
@@ -59,30 +65,37 @@ jobs:
       - name: Commit changes
         if: success()
         run: |
-          git config --global user.name "Auto Syncer"
-          git config --global user.email "auto-sync@github"
+          git config --global user.name "GitHub Auto Sync"
+          git config --global user.email "auto-sync@github.com"
           
           git add "${{ env.TARGET_BASE_DIR }}"
           if ! git diff --quiet --exit-code; then
-            git commit -m " Synced files: $(date +%F)"
+            git commit -m "🔄 自动同步文件 [$(date +%F)]" -m "来源: ${{ env.URL_LIST_FILE }}"
             git push
           fi
 
-      - name: Upload logs (v4)
+      - name: Upload logs
         uses: actions/upload-artifact@v4
         with:
           name: sync-logs
-          path: |
-            ./sync-logs/*
-          retention-days: 7
+          path: ./sync-logs/
+          retention-days: 3
 
-  status-notify:
+  status-report:
     needs: [file-sync]
     runs-on: ubuntu-latest
     if: always()
     steps:
-      - uses: actions-cool/workflow-status@v1
-        with:
-          check: ${{ needs.file-sync.result }}
-          success: '✅ 同步完成至目录: ${{ env.TARGET_BASE_DIR }}'
-          failure: '❌ 同步失败，查看Artifact日志'
+      - name: Show report
+        run: |
+          echo "::group::📋 同步执行报告"
+          echo "执行时间: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          echo "目标目录: ${{ env.TARGET_BASE_DIR }}"
+          echo "处理结果: ${{ needs.file-sync.result }}"
+          echo "::endgroup::"
+          
+          if [[ "${{ needs.file-sync.result }}" == "success" ]]; then
+            echo "::notice::✅ 已成功同步文件到目录: ${{ env.TARGET_BASE_DIR }}"
+          else
+            echo "::error::❌ 同步失败，请下载 Artifact 日志排查问题"
+          fi

@@ -1,4 +1,4 @@
-name: Robust Rules Sync
+name: Smart Rules Sync
 on:
   workflow_dispatch:
   push:
@@ -16,72 +16,81 @@ jobs:
   sync-rules:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           path: repo
-
-      - name: Validate URLs
-        working-directory: repo
-        run: |
-          echo "=== URL有效性检查 ==="
-          while IFS= read -r url; do
-            [[ -z "$url" || "$url" == \#* ]] && continue
-            if ! curl --head --fail -sS "$url" >/dev/null; then
-              echo "::error::无效URL: $url"
-              exit 1
-            fi
-          done < "${{ env.URL_LIST_FILE }}"
 
       - name: Process URLs
         working-directory: repo
         run: |
-          mkdir -p "${{ env.TARGET_DIR }}"
-          
+          error_log="sync_errors_$(date +%s).log"
+          total=0
+          success=0
+          failure=0
+
           while IFS= read -r raw_url; do
+            ((total++))
             [[ -z "$raw_url" || "$raw_url" == \#* ]] && continue
 
-            # URL标准化处理
-            clean_url=$(echo "$raw_url" | awk '{print $1}' | sed 's/[[:space:]]*$//')
-            url_path="${clean_url%/*}"
-            filename="${clean_url##*/}"
+            # URL清洗和验证
+            clean_url=$(echo "$raw_url" | awk '{print $1}' | xargs)
+            if ! curl --head --fail -sS "$clean_url" &>/dev/null; then
+              echo "::warning::无效URL跳过: $clean_url"
+              echo "[INVALID] $clean_url" >> "$error_log"
+              ((failure++))
+              continue
+            fi
 
-            # 路径特征码生成
+            # 文件名生成逻辑
+            url_path="${clean_url%/*}"
             path_parts=($(echo "$url_path" | awk -F/ '{for(i=4;i<=NF;i++) print $i}'))
             if [ ${#path_parts[@]} -ge ${{ env.PATH_SEGMENTS }} ]; then
               signature=$(IFS=_ ; echo "${path_parts[*]: -${{ env.PATH_SEGMENTS }}}")
             else
-              signature="${path_parts[-1]}"
+              signature="${path_parts[-1]:-default}"
             fi
 
-            # 构建安全文件名
-            safe_name="${signature}_${filename}"
-            safe_name=$(echo "$safe_name" | tr -cd 'a-zA-Z0-9_.-' | sed 's/^\.//')
+            safe_name="${signature}_${clean_url##*/}"
+            safe_name=$(echo "$safe_name" | tr -cd 'a-zA-Z0-9_.-')
             output_path="${{ env.TARGET_DIR }}/$safe_name"
 
-            echo "下载: $clean_url → $output_path"
-            if ! curl -fL "$clean_url" -o "$output_path"; then
+            # 带重试的下载
+            if curl --retry 2 --retry-delay 3 -fL "$clean_url" -o "$output_path"; then
+              ((success++))
+              echo "✅ 成功: $safe_name"
+            else
               echo "::error::下载失败: $clean_url"
-              exit 1
+              echo "[FAILED] $clean_url" >> "$error_log"
+              ((failure++))
             fi
           done < "${{ env.URL_LIST_FILE }}"
 
-      - name: Verify files
-        working-directory: repo
-        run: |
-          echo "=== 下载文件验证 ==="
-          ls -l "${{ env.TARGET_DIR }}"
-          echo "文件总数: $(ls "${{ env.TARGET_DIR }}" | wc -l)"
+          # 结果处理
+          echo "total=$total" >> $GITHUB_OUTPUT
+          echo "success=$success" >> $GITHUB_OUTPUT
+          echo "failure=$failure" >> $GITHUB_OUTPUT
+
+          if [ $failure -gt 0 ]; then
+            echo "::warning::同步完成，但有 $failure 个失败项"
+            exit 1  # 失败时标记任务异常
+          fi
 
       - name: Commit changes
         working-directory: repo
+        if: success() || failure()  # 即使有失败也提交
         run: |
           if [ -n "$(git status --porcelain)" ]; then
             git config user.name "Auto Sync"
             git config user.email "auto@sync"
             git add "${{ env.TARGET_DIR }}"
-            git commit -m "🔄 更新规则文件 $(date +%F)"
+            git commit -m "🔄 更新规则（成功${{ steps.sync-rules.outputs.success }}，失败${{ steps.sync-rules.outputs.failure }}）"
             git push
-          else
-            echo "没有文件变更需要提交"
           fi
+
+      - name: Upload error report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sync-error-report
+          path: |
+            repo/${{ env.TARGET_DIR }}_errors.log

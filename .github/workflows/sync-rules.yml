@@ -1,4 +1,4 @@
-name: Persistent Rules Sync
+name: Robust Rules Sync
 on:
   workflow_dispatch:
   push:
@@ -9,60 +9,79 @@ on:
 
 env:
   URL_LIST_FILE: 'rules-list.txt'
-  TARGET_DIR: './rules'  # 明确相对路径
-  MAX_RETRY: 2
+  TARGET_DIR: 'rules'
+  PATH_SEGMENTS: 2
 
 jobs:
   sync-rules:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: Checkout repo
         uses: actions/checkout@v4
         with:
-          path: repo  # 指定检出到repo子目录
+          path: repo
 
-      - name: Verify workspace
+      - name: Validate URLs
+        working-directory: repo
         run: |
-          echo "工作区路径: ${{ github.workspace }}"
-          echo "仓库路径: ${{ github.workspace }}/repo"
-          ls -la ${{ github.workspace }}/repo
+          echo "=== URL有效性检查 ==="
+          while IFS= read -r url; do
+            [[ -z "$url" || "$url" == \#* ]] && continue
+            if ! curl --head --fail -sS "$url" >/dev/null; then
+              echo "::error::无效URL: $url"
+              exit 1
+            fi
+          done < "${{ env.URL_LIST_FILE }}"
 
-      - name: Create target directory
+      - name: Process URLs
+        working-directory: repo
         run: |
-          mkdir -p "${{ github.workspace }}/repo/${{ env.TARGET_DIR }}"
-          echo "目标目录结构："
-          tree -d ${{ github.workspace }}/repo
-
-      - name: Download files
-        working-directory: ${{ github.workspace }}/repo  # 关键！锁定工作目录
-        run: |
+          mkdir -p "${{ env.TARGET_DIR }}"
+          
           while IFS= read -r raw_url; do
             [[ -z "$raw_url" || "$raw_url" == \#* ]] && continue
 
-            # 路径解析逻辑...
-            output_path="${{ env.TARGET_DIR }}/$final_name"
+            # URL标准化处理
+            clean_url=$(echo "$raw_url" | awk '{print $1}' | sed 's/[[:space:]]*$//')
+            url_path="${clean_url%/*}"
+            filename="${clean_url##*/}"
 
-            # 带路径验证的下载
-            echo "下载到: $(pwd)/$output_path"
-            if curl -fL "$clean_url" -o "$output_path"; then
-              echo "✅ 文件已保存到仓库目录"
+            # 路径特征码生成
+            path_parts=($(echo "$url_path" | awk -F/ '{for(i=4;i<=NF;i++) print $i}'))
+            if [ ${#path_parts[@]} -ge ${{ env.PATH_SEGMENTS }} ]; then
+              signature=$(IFS=_ ; echo "${path_parts[*]: -${{ env.PATH_SEGMENTS }}}")
+            else
+              signature="${path_parts[-1]}"
             fi
-          done < "${{ github.workspace }}/repo/${{ env.URL_LIST_FILE }}"
+
+            # 构建安全文件名
+            safe_name="${signature}_${filename}"
+            safe_name=$(echo "$safe_name" | tr -cd 'a-zA-Z0-9_.-' | sed 's/^\.//')
+            output_path="${{ env.TARGET_DIR }}/$safe_name"
+
+            echo "下载: $clean_url → $output_path"
+            if ! curl -fL "$clean_url" -o "$output_path"; then
+              echo "::error::下载失败: $clean_url"
+              exit 1
+            fi
+          done < "${{ env.URL_LIST_FILE }}"
+
+      - name: Verify files
+        working-directory: repo
+        run: |
+          echo "=== 下载文件验证 ==="
+          ls -l "${{ env.TARGET_DIR }}"
+          echo "文件总数: $(ls "${{ env.TARGET_DIR }}" | wc -l)"
 
       - name: Commit changes
-        working-directory: ${{ github.workspace }}/repo
+        working-directory: repo
         run: |
-          echo "=== 提交前文件状态 ==="
-          git status --porcelain "${{ env.TARGET_DIR }}"
-          
-          git add "${{ env.TARGET_DIR }}"
-          if ! git diff --quiet --exit-code; then
-            git commit -m "🔄 更新规则文件"
+          if [ -n "$(git status --porcelain)" ]; then
+            git config user.name "Auto Sync"
+            git config user.email "auto@sync"
+            git add "${{ env.TARGET_DIR }}"
+            git commit -m "🔄 更新规则文件 $(date +%F)"
             git push
-            echo "变更已提交到仓库"
+          else
+            echo "没有文件变更需要提交"
           fi
-
-      - name: Post-sync verification
-        run: |
-          echo "=== 最终目录验证 ==="
-          ls -lR ${{ github.workspace }}/repo/${{ env.TARGET_DIR }}

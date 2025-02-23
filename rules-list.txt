@@ -1,3 +1,6 @@
+   https://valid.url/file1.yaml
+   https://invalid.url/file2.yaml
+   https://valid.url/file3.yaml
 https://raw.githubusercontent.com/actions/checkout/main/action.yml
 https://raw.githubusercontent.com/actions/upload-artifact/main/action.yml
 https://raw.githubusercontent.com/example/repo/main/rules/security.yaml

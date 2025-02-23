@@ -1,68 +1,51 @@
-name: Sync Rules Files
+name: Sync Rules
+
 on:
   workflow_dispatch: # 手动触发
   schedule:
-    - cron: '0 20 * * *' # UTC时间每天20:00（北京时间次日4:00）
+    - cron: '0 4 * * *' # 每天 4:00 自动触发
   push:
     paths:
-      - 'rules-list.txt' # 文件变动触发
-
-env:
-  INPUT_LIST: rules-list.txt
-  OUTPUT_DIR: rules
+      - rules-list.txt # 当 rules-list.txt 文件变动时触发
 
 jobs:
-  sync-files:
+  sync:
     runs-on: ubuntu-latest
-    concurrency: sync-rules  # 防止并发执行
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v2
 
-    - name: Check if rules-list.txt exists
-      id: check_file
-      uses: andstor/file-existence-action@v3
-      with:
-        files: ${{ env.INPUT_LIST }}
+      - name: Read rules-list.txt
+        id: read_rules
+        run: |
+          # 读取规则列表并生成下载命令
+          echo "url_list=$(cat rules-list.txt | tr '\n' ' ')" >> $GITHUB_ENV
 
-    - name: Create output directory
-      if: steps.check_file.outputs.files_exists == 'true'
-      run: mkdir -p ${{ env.OUTPUT_DIR }}
-
-    - name: Download and rename files
-      if: steps.check_file.outputs.files_exists == 'true'
-      run: |
-        while IFS= read -r url; do
-          if [[ -n "$url" ]]; then
-            # 校验 URL 格式
-            if ! [[ "$url" =~ ^(http|https):// ]]; then
-              echo "Invalid URL: $url"
-              continue
-            fi
-
-            # 提取URL路径最后两个段（如 geoip/telegram.srs → geoip_telegram.srs）
-            path_segment=$(echo "$url" | awk -F/ '{print $(NF-1)"_"$NF}')
-
-            # 检查文件名是否为空
-            if [[ -z "$path_segment" ]]; then
-              echo "Error: Could not extract filename from URL: $url"
-              continue
-            fi
-
-            # 下载文件，并处理错误
-            if curl -sL "$url" -o "${{ env.OUTPUT_DIR }}/$path_segment"; then
-              echo "Downloaded: $url → $path_segment"
+      - name: Download files
+        run: |
+          IFS=' ' read -r -a urls <<< "$url_list"
+          for url in "${urls[@]}"; do
+            # 提取文件名和路径
+            filename=$(basename "$url")
+            path=$(dirname "$url")
+            # 提取最后一段路径名
+            last_segment=$(basename "$path")
+            # 新文件名
+            new_filename="${last_segment}_${filename}"
+            # 下载文件
+            if curl -L -o "rules/$new_filename" "$url"; then
+              echo "Downloaded: $new_filename"
             else
-              echo "Failed to download: $url"
+              echo "Failed to download: $url" >> download_errors.log
             fi
+          done
+
+      - name: Check for updates
+        run: |
+          # 检查是否有新文件下载
+          if [ -s download_errors.log ]; then
+            echo "Some files failed to download. Check download_errors.log for details."
+          else
+            echo "All files downloaded successfully."
           fi
-        done < ${{ env.INPUT_LIST }}
-
-    - name: Show result
-      if: steps.check_file.outputs.files_exists == 'true'
-      run: ls -lh ${{ env.OUTPUT_DIR }}
-
-    - name: Error - rules-list.txt not found
-      if: steps.check_file.outputs.files_exists == 'false'
-      run: echo "Error: rules-list.txt not found. Workflow will exit."

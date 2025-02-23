@@ -1,4 +1,4 @@
-name: Path-Correct Rules Sync
+name: Path-Fixed Rules Sync
 on:
   workflow_dispatch:
   push:
@@ -21,44 +21,32 @@ jobs:
         with:
           path: repo
 
-      - name: Verify workspace
+      - name: Setup directories
         run: |
-          echo "GitHub工作空间: ${{ github.workspace }}"
-          echo "仓库物理路径: ${{ github.workspace }}/repo"
-          ls -la "${{ github.workspace }}/repo"
-
-      - name: Create target directory
-        run: |
-          mkdir -p "${{ github.workspace }}/repo/${{ env.TARGET_DIR }}"
-          echo "目录结构验证："
-          tree -d "${{ github.workspace }}/repo"
+          # 创建相对路径目录
+          mkdir -p "./repo/${{ env.TARGET_DIR }}"
+          echo "验证目录结构："
+          tree -d ./repo
 
       - name: Process URLs
-        working-directory: ${{ github.workspace }}/repo
+        working-directory: ./repo  # 使用相对路径
         run: |
-          # 调试信息
-          echo "当前工作目录: $(pwd)"
-          echo "目标目录绝对路径: $(pwd)/${{ env.TARGET_DIR }}"
-
+          set -x
           while IFS= read -r raw_url; do
             [[ -z "$raw_url" || "$raw_url" == \#* ]] && continue
 
             # 文件名生成逻辑...
             output_path="${{ env.TARGET_DIR }}/$safe_name"
-
+            
             # 带路径验证的下载
-            echo "下载到: $output_path"
-            if curl -fL "$clean_url" -o "$output_path"; then
-              echo "文件位置验证:"
-              ls -l "$output_path"
-            fi
+            echo "绝对路径：$(pwd)/$output_path"
+            curl -fL "$clean_url" -o "$output_path"
           done < "${{ env.URL_LIST_FILE }}"
 
       - name: Commit changes
-        working-directory: ${{ github.workspace }}/repo
+        working-directory: ./repo
         run: |
-          echo "提交前工作目录: $(pwd)"
-          git status
+          echo "当前工作目录：$(pwd)"
           git add "${{ env.TARGET_DIR }}"
-          git commit -m "Update rules"
+          git commit -m "🔄 更新规则文件"
           git push

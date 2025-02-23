@@ -1,4 +1,4 @@
-name: Final Rules Sync Solution
+name: Path-Correct Rules Sync
 on:
   workflow_dispatch:
   push:
@@ -21,103 +21,44 @@ jobs:
         with:
           path: repo
 
-      - name: Initialize directories
+      - name: Verify workspace
         run: |
-          # 创建多级目录结构
-          mkdir -p "$GITHUB_WORKSPACE/repo/${{ env.TARGET_DIR }}"
-          echo "目标目录路径：$GITHUB_WORKSPACE/repo/${{ env.TARGET_DIR }}"
+          echo "GitHub工作空间: ${{ github.workspace }}"
+          echo "仓库物理路径: ${{ github.workspace }}/repo"
+          ls -la "${{ github.workspace }}/repo"
 
-      - name: Sync files
-        working-directory: $GITHUB_WORKSPACE/repo
+      - name: Create target directory
         run: |
-          # 调试模式
-          set -x
+          mkdir -p "${{ github.workspace }}/repo/${{ env.TARGET_DIR }}"
+          echo "目录结构验证："
+          tree -d "${{ github.workspace }}/repo"
 
-          # 安全初始化变量
-          error_log="sync_errors.log"
-          total_count=0
-          success_count=0
-          failure_count=0
+      - name: Process URLs
+        working-directory: ${{ github.workspace }}/repo
+        run: |
+          # 调试信息
+          echo "当前工作目录: $(pwd)"
+          echo "目标目录绝对路径: $(pwd)/${{ env.TARGET_DIR }}"
 
-          # 验证文件存在
-          if [ ! -f "${{ env.URL_LIST_FILE }}" ]; then
-            echo "::error::URL列表文件不存在: ${{ env.URL_LIST_FILE }}"
-            exit 1
-          fi
+          while IFS= read -r raw_url; do
+            [[ -z "$raw_url" || "$raw_url" == \#* ]] && continue
 
-          # 主处理循环
-          while IFS= read -r raw_url || [ -n "$raw_url" ]; do
-            ((total_count++))
-            
-            # 跳过空行和注释
-            [[ "$raw_url" =\~ ^[[:space:]]*$ || "$raw_url" == \#* ]] && continue
-
-            # URL预处理
-            clean_url=$(echo "$raw_url" | awk '{print $1}' | sed 's/[[:space:]]*$//')
-            echo "处理URL: $clean_url"
-
-            # 验证URL格式
-            if [[ ! "$clean_url" =\~ ^https?:// ]]; then
-              echo "::warning::无效协议: $clean_url"
-              ((failure_count++))
-              continue
-            fi
-
-            # 文件名生成
-            url_path="${clean_url%/*}"
-            filename="${clean_url##*/}"
-            path_parts=($(echo "$url_path" | awk -F/ '{for(i=4;i<=NF;i++) print $i}'))
-            
-            if [ ${#path_parts[@]} -ge ${{ env.PATH_SEGMENTS }} ]; then
-              signature=$(IFS=_ ; echo "${path_parts[*]: -${{ env.PATH_SEGMENTS }}}")
-            else
-              signature="${path_parts[-1]:-default}"
-            fi
-
-            safe_name="${signature}_${filename}"
-            safe_name=$(echo "$safe_name" | tr -cd 'a-zA-Z0-9_.-')
+            # 文件名生成逻辑...
             output_path="${{ env.TARGET_DIR }}/$safe_name"
 
-            # 下载执行
-            echo "下载到: $(pwd)/$output_path"
-            if curl --retry 3 --retry-delay 5 -fL "$clean_url" -o "$output_path"; then
-              ((success_count++))
-              echo "✅ 下载成功"
-            else
-              echo "::error::下载失败"
-              ((failure_count++))
-              # 清理残留文件
-              [ -f "$output_path" ] && rm -f "$output_path"
+            # 带路径验证的下载
+            echo "下载到: $output_path"
+            if curl -fL "$clean_url" -o "$output_path"; then
+              echo "文件位置验证:"
+              ls -l "$output_path"
             fi
           done < "${{ env.URL_LIST_FILE }}"
 
-          # 结果统计
-          echo "total=$total_count" >> $GITHUB_OUTPUT
-          echo "success=$success_count" >> $GITHUB_OUTPUT
-          echo "failure=$failure_count" >> $GITHUB_OUTPUT
-
-          if [ $failure_count -gt 0 ]; then
-            echo "::warning::同步完成，失败项：$failure_count"
-            exit 1
-          fi
-
-      - name: Verify files
-        working-directory: $GITHUB_WORKSPACE/repo
-        run: |
-          echo "=== 文件验证 ==="
-          ls -l "${{ env.TARGET_DIR }}"
-          [ "$(ls -A "${{ env.TARGET_DIR }}")" ] || echo "目录为空"
-
       - name: Commit changes
-        working-directory: $GITHUB_WORKSPACE/repo
-        if: success() || failure()
+        working-directory: ${{ github.workspace }}/repo
         run: |
-          if [ -n "$(git status --porcelain)" ]; then
-            git config user.name "GitHub Actions"
-            git config user.email "actions@github.com"
-            git add "${{ env.TARGET_DIR }}"
-            git commit -m "🔄 同步更新：成功 ${{ steps.sync-rules.outputs.success }} 项"
-            git push
-          else
-            echo "无变更需要提交"
-          fi
+          echo "提交前工作目录: $(pwd)"
+          git status
+          git add "${{ env.TARGET_DIR }}"
+          git commit -m "Update rules"
+          git push

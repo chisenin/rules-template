@@ -1,5 +1,7 @@
 https://raw.githubusercontent.com/actions/checkout/main/action.yml
 https://raw.githubusercontent.com/actions/upload-artifact/main/action.yml
+https://raw.githubusercontent.com/example/repo/main/rules/security.yaml
+https://raw.githubusercontent.com/example/repo/main/rules/network.yaml
 
 https://raw.githubusercontent.com/example/repo/main/configs/db.yaml
 # anti_ad

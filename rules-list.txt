@@ -1,12 +1,3 @@
-   https://valid.url/file1.yaml
-   https://invalid.url/file2.yaml
-   https://valid.url/file3.yaml
-https://raw.githubusercontent.com/actions/checkout/main/action.yml
-https://raw.githubusercontent.com/actions/upload-artifact/main/action.yml
-https://raw.githubusercontent.com/example/repo/main/rules/security.yaml
-https://raw.githubusercontent.com/example/repo/main/rules/network.yaml
-
-https://raw.githubusercontent.com/example/repo/main/configs/db.yaml
 # anti_ad
 https://raw.githubusercontent.com/REIJI007/AdBlock_Rule_For_Sing-box/main/adblock_reject.srs
 
@@ -81,5 +72,3 @@ https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geosite/aliy
 
 # cn_geosite-geolocation
 https://github.com/SagerNet/sing-geosite/raw/refs/heads/rule-set/geosite-geolocation-!cn.srs
-
-https://raw.githubusercontent.com/example/repo/main/configs/app.yaml

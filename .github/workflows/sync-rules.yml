@@ -1,51 +1,77 @@
 name: Sync Rules
 
 on:
-  workflow_dispatch: # 手动触发
   schedule:
-    - cron: '0 4 * * *' # 每天 4:00 自动触发
+    - cron: '0 4 * * *'  # Runs every day at 4:00 AM UTC
+  workflow_dispatch:  # Allows manual triggering
   push:
     paths:
-      - rules-list.txt # 当 rules-list.txt 文件变动时触发
+      - 'rules-list.txt' # Triggers when rules-list.txt is modified
+
+permissions:
+  contents: write
 
 jobs:
-  sync:
+  sync_rules:
     runs-on: ubuntu-latest
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v2
+    env:
+      RULES_LIST_FILE: 'rules-list.txt'
+      RULES_OUTPUT_DIR: 'rules'
 
-      - name: Read rules-list.txt
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Read Rules List
         id: read_rules
         run: |
-          # 读取规则列表并生成下载命令
-          echo "url_list=$(cat rules-list.txt | tr '\n' ' ')" >> $GITHUB_ENV
+          if [[ -f "${{ env.RULES_LIST_FILE }}" ]]; then
+            RULES=$(cat "${{ env.RULES_LIST_FILE }}")
+            echo "rules<<EOF" >> $GITHUB_OUTPUT
+            echo "$RULES" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo "::error file=${{ env.RULES_LIST_FILE }}::Rules list file not found: ${{ env.RULES_LIST_FILE }}"
+            exit 1
+          fi
 
-      - name: Download files
+      - name: Download and Process Rules
+        id: download_rules
         run: |
-          IFS=' ' read -r -a urls <<< "$url_list"
-          for url in "${urls[@]}"; do
-            # 提取文件名和路径
-            filename=$(basename "$url")
-            path=$(dirname "$url")
-            # 提取最后一段路径名
-            last_segment=$(basename "$path")
-            # 新文件名
-            new_filename="${last_segment}_${filename}"
-            # 下载文件
-            if curl -L -o "rules/$new_filename" "$url"; then
-              echo "Downloaded: $new_filename"
+          mkdir -p "${{ env.RULES_OUTPUT_DIR }}"
+          RULES="${{ steps.read_rules.outputs.rules }}"
+          IFS=$'\n'
+          for RULE_URL in $RULES; do
+            if [[ -z "$RULE_URL" ]]; then
+              continue # Skip empty lines
+            fi
+
+            FILENAME=$(basename "$RULE_URL")
+            PATH_SEGMENT=$(echo "$RULE_URL" | awk -F'/' '{print $(NF-1)}') # Extract the second to last segment
+            NEW_FILENAME="${PATH_SEGMENT}_${FILENAME}"
+            OUTPUT_PATH="${{ env.RULES_OUTPUT_DIR }}/${NEW_FILENAME}"
+
+            echo "Downloading: $RULE_URL to $OUTPUT_PATH"
+
+            curl -sSf "$RULE_URL" -o "$OUTPUT_PATH"
+            if [ $? -ne 0 ]; then
+              echo "::warning file=$RULE_URL::Failed to download $RULE_URL"
             else
-              echo "Failed to download: $url" >> download_errors.log
+              echo "Downloaded $RULE_URL successfully."
             fi
           done
 
-      - name: Check for updates
+      - name: Check for changes
+        id: check_changes
         run: |
-          # 检查是否有新文件下载
-          if [ -s download_errors.log ]; then
-            echo "Some files failed to download. Check download_errors.log for details."
-          else
-            echo "All files downloaded successfully."
-          fi
+          git add "${{ env.RULES_OUTPUT_DIR }}"/*
+          git diff --quiet --exit-code || echo "::set-output name=changed::true"
+
+      - name: Commit and Push changes
+        if: steps.check_changes.outputs.changed == 'true'
+        run: |
+          git config --local user.email "actions@github.com"
+          git config --local user.name "GitHub Actions"
+          git commit -m "Update rules from ${{ env.RULES_LIST_FILE }}"
+          git push

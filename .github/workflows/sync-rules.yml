@@ -5,7 +5,7 @@ on:
     - cron: '0 20 * * *' # UTC时间每天20:00（北京时间次日4:00）
   push:
     paths:
-      - 'rules-list.txt' # 文件变动触发<a target="_blank" href="https://docs.github.com/zh/actions/writing-workflows/workflow-syntax-for-github-actions" class="hitref" data-title="GitHub Actions 的工作流语法" data-snippet='GitHub 会针对推送使用双点差异，针对拉取请求使用三点差异，生成已更改文件列表：. 拉取请求： 三点差异比较主题分支的最近版本与其中使用基本分支最新同步主题分支的提交。' data-url="https://docs.github.com/zh/actions/writing-workflows/workflow-syntax-for-github-actions">1</a><a target="_blank" href="https://cloud.tencent.com/developer/information/%E5%A6%82%E4%BD%95%E6%A0%B9%E6%8D%AE%E4%B8%8A%E6%AC%A1%E6%8F%90%E4%BA%A4%E6%97%B6%E4%BF%AE%E6%94%B9%E7%9A%84%E6%96%87%E4%BB%B6%E6%88%96%E7%9B%AE%E5%BD%95%E8%A7%A6%E5%8F%91github%E6%93%8D%E4%BD%9C%E4%BD%9C%E4%B8%9A%E6%88%96%E5%B7%A5%E4%BD%9C%E6%B5%81" class="hitref" data-title="如何根据上次提交时修改的文件或目录触发github操作作业或工作流" data-snippet='查看工作流程运行结果：在GitHub仓库页面的“Actions”选项卡下，可以查看工作流程的运行情况和结果。如果有文件或目录的更改，工作流程将会被触发并执行定义的操作。' data-url="https://cloud.tencent.com/developer/information/%E5%A6%82%E4%BD%95%E6%A0%B9%E6%8D%AE%E4%B8%8A%E6%AC%A1%E6%8F%90%E4%BA%A4%E6%97%B6%E4%BF%AE%E6%94%B9%E7%9A%84%E6%96%87%E4%BB%B6%E6%88%96%E7%9B%AE%E5%BD%95%E8%A7%A6%E5%8F%91github%E6%93%8D%E4%BD%9C%E4%BD%9C%E4%B8%9A%E6%88%96%E5%B7%A5%E4%BD%9C%E6%B5%81">8</a>
+      - 'rules-list.txt' # 文件变动触发
 
 env:
   INPUT_LIST: rules-list.txt
@@ -14,23 +14,55 @@ env:
 jobs:
   sync-files:
     runs-on: ubuntu-latest
+    concurrency: sync-rules  # 防止并发执行
+
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
 
+    - name: Check if rules-list.txt exists
+      id: check_file
+      uses: andstor/file-existence-action@v3
+      with:
+        files: ${{ env.INPUT_LIST }}
+
     - name: Create output directory
+      if: steps.check_file.outputs.files_exists == 'true'
       run: mkdir -p ${{ env.OUTPUT_DIR }}
 
     - name: Download and rename files
+      if: steps.check_file.outputs.files_exists == 'true'
       run: |
         while IFS= read -r url; do
           if [[ -n "$url" ]]; then
+            # 校验 URL 格式
+            if ! [[ "$url" =~ ^(http|https):// ]]; then
+              echo "Invalid URL: $url"
+              continue
+            fi
+
             # 提取URL路径最后两个段（如 geoip/telegram.srs → geoip_telegram.srs）
             path_segment=$(echo "$url" | awk -F/ '{print $(NF-1)"_"$NF}')
-            curl -sL "$url" -o "${{ env.OUTPUT_DIR }}/$path_segment"
-            echo "Downloaded: $url → $path_segment"
+
+            # 检查文件名是否为空
+            if [[ -z "$path_segment" ]]; then
+              echo "Error: Could not extract filename from URL: $url"
+              continue
+            fi
+
+            # 下载文件，并处理错误
+            if curl -sL "$url" -o "${{ env.OUTPUT_DIR }}/$path_segment"; then
+              echo "Downloaded: $url → $path_segment"
+            else
+              echo "Failed to download: $url"
+            fi
           fi
         done < ${{ env.INPUT_LIST }}
 
     - name: Show result
+      if: steps.check_file.outputs.files_exists == 'true'
       run: ls -lh ${{ env.OUTPUT_DIR }}
+
+    - name: Error - rules-list.txt not found
+      if: steps.check_file.outputs.files_exists == 'false'
+      run: echo "Error: rules-list.txt not found. Workflow will exit."

@@ -1,0 +1,95 @@
+name: Smart File Sync with Path Encoding
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * *'
+
+# ================= 用户配置区 =================
+env:
+  URL_LIST_FILE: 'url-list.txt'     # URL列表文件
+  TARGET_BASE_DIR: 'rules' # 存储目录
+  PATH_SEGMENTS: 2                 # 使用最后N段路径作为特征码 (推荐2)
+# ==============================================
+
+permissions:
+  contents: write
+
+jobs:
+  file-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Prepare workspace
+        run: |
+          mkdir -p "${{ env.TARGET_BASE_DIR }}"
+          rm -rf ./sync-logs && mkdir ./sync-logs
+
+      - name: Download files
+        run: |
+          while IFS= read -r raw_url; do
+            # 跳过空行和注释
+            [[ -z "$raw_url" || "$raw_url" == \#* ]] && continue
+            
+            # 清洗URL并提取路径
+            url="${raw_url%%[#?]*}"
+            path_parts=($(echo "$url" | awk -F/ '{for(i=1;i<=NF;i++) if($i!="") print $i}'))
+            
+            # 生成路径特征码
+            if [ ${#path_parts[@]} -ge ${{ env.PATH_SEGMENTS} } ]; then
+              start_idx=$(( ${#path_parts[@]} - ${{ env.PATH_SEGMENTS} } ))
+              signature=$(IFS=_ ; echo "${path_parts[*]:$start_idx:${{ env.PATH_SEGMENTS} }}")
+            else
+              signature="${path_parts[-1]}"
+            fi
+
+            # 构建安全文件名
+            original_name="${url##*/}"
+            safe_name="${signature}_${original_name}"
+            safe_name="${safe_name//[^a-zA-Z0-9_.-]/_}"  # 替换非法字符
+            
+            # 执行下载
+            output_path="${{ env.TARGET_BASE_DIR }}/$safe_name"
+            echo "下载: $url → $output_path"
+            
+            if curl -fL "$url" -o "$output_path"; then
+              echo "[SUCCESS] $(date +%FT%T) $url" >> ./sync-logs/success.log
+            else
+              echo "[FAILED] $(date +%FT%T) $url" >> ./sync-logs/error.log
+              exit 1
+            fi
+          done < "${{ env.URL_LIST_FILE }}"
+
+      - name: Commit changes
+        if: success()
+        run: |
+          git config --global user.name "Auto Syncer"
+          git config --global user.email "auto-sync@github"
+          
+          git add "${{ env.TARGET_BASE_DIR }}"
+          if ! git diff --quiet --exit-code; then
+            git commit -m "🔄 Synced files: $(date +%F)"
+            git push
+          else
+            echo "没有检测到文件变更"
+          fi
+
+      - name: Upload logs
+        uses: actions/upload-artifact@v3
+        with:
+          name: sync-logs
+          path: ./sync-logs
+
+  status-notify:
+    needs: [file-sync]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - uses: actions-cool/workflow-status@v1
+        with:
+          check: ${{ needs.file-sync.result }}
+          success: '✅ 成功同步到目录: ${{ env.TARGET_BASE_DIR }}'
+          failure: '❌ 同步失败，下载日志查看详情'

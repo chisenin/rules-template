@@ -1,4 +1,4 @@
-name: Path-Fixed Rules Sync
+name: Verified Rules Sync
 on:
   workflow_dispatch:
   push:
@@ -16,37 +16,65 @@ jobs:
   sync-rules:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           path: repo
+          fetch-depth: 0
 
       - name: Setup directories
         run: |
-          # 创建相对路径目录
+          # 创建精确的目标目录
           mkdir -p "./repo/${{ env.TARGET_DIR }}"
           echo "验证目录结构："
-          tree -d ./repo
+          ls -l ./repo
 
-      - name: Process URLs
-        working-directory: ./repo  # 使用相对路径
+      - name: Process URLs (Debug Mode)
+        working-directory: ./repo
         run: |
-          set -x
-          while IFS= read -r raw_url; do
-            [[ -z "$raw_url" || "$raw_url" == \#* ]] && continue
+          set -x  # 启用调试模式
+          echo "当前工作目录: $(pwd)"
+          echo "目标目录绝对路径: $(realpath ${{ env.TARGET_DIR }})"
 
-            # 文件名生成逻辑...
+          while IFS= read -r raw_url; do
+            # 跳过注释和空行
+            [[ "$raw_url" =\~ ^#.*$ || -z "$raw_url" ]] && continue
+
+            # 清洗URL
+            clean_url=$(echo "$raw_url" | awk '{print $1}' | xargs)
+
+            # 生成安全文件名
+            url_path="${clean_url%/*}"
+            path_parts=($(echo "$url_path" | awk -F/ '{for(i=4;i<=NF;i++) print $i}'))
+            signature=$(IFS=_ ; echo "${path_parts[*]: -2}")
+            safe_name="${signature}_${clean_url##*/}"
+            safe_name=$(echo "$safe_name" | tr -cd 'a-zA-Z0-9_.-')
+
+            # 完整输出路径
             output_path="${{ env.TARGET_DIR }}/$safe_name"
-            
-            # 带路径验证的下载
-            echo "绝对路径：$(pwd)/$output_path"
-            curl -fL "$clean_url" -o "$output_path"
+            echo "下载路径验证: $(pwd)/$output_path"
+
+            # 带重试的下载
+            if curl --retry 3 --retry-delay 5 -fL "$clean_url" -o "$output_path"; then
+              echo "✅ 文件已保存到: $output_path"
+              ls -l "$output_path"
+            else
+              echo "::error::下载失败: $clean_url"
+              exit 1
+            fi
           done < "${{ env.URL_LIST_FILE }}"
 
       - name: Commit changes
         working-directory: ./repo
         run: |
-          echo "当前工作目录：$(pwd)"
-          git add "${{ env.TARGET_DIR }}"
-          git commit -m "🔄 更新规则文件"
-          git push
+          # 提交前验证
+          echo "=== 待提交文件 ==="
+          git status --porcelain
+          
+          if [ -n "$(git status --porcelain)" ]; then
+            git config --global user.name "Auto Sync Bot"
+            git config --global user.email "bot@sync"
+            git add "${{ env.TARGET_DIR }}"
+            git commit -m "🔄 自动更新规则文件"
+            git push
+          fi

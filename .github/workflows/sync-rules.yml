@@ -50,9 +50,15 @@ jobs:
             new_filename="${prefix}-${filename}"
             
             # 下载文件到指定目录
+            echo "Downloading $url as $new_filename..."
             curl -sSL "$url" -o "${{ env.OUTPUT_DIR }}/$new_filename"
             
-            echo "Downloaded $url as $new_filename"
+            # 检查文件是否成功下载
+            if [ -f "${{ env.OUTPUT_DIR }}/$new_filename" ]; then
+              echo "Successfully downloaded $url as $new_filename"
+            else
+              echo "Failed to download $url"
+            fi
           done
 
       # 提交更改到仓库
@@ -61,8 +67,10 @@ jobs:
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
           
-          # 添加新文件到暂存区
-          git add "${{ env.OUTPUT_DIR }}/*"
+          # 强制覆盖旧文件
+          for file in "${{ env.OUTPUT_DIR }}"/*; do
+            git add "$file" || true
+          done
           
           # 检查是否有更改需要提交
           if git diff --staged --quiet; then

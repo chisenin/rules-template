@@ -1,86 +1,41 @@
-name: Sync Rules Files
+name: Sync Rules
 
 on:
-  # 触发条件1：手动触发
+  # 手动触发
   workflow_dispatch:
-  
-  # 触发条件2：每天凌晨4点自动触发
+  # 每天凌晨4点自动触发
   schedule:
-    - cron: "0 4 * * *"
-
-  # 触发条件3：rules-list.txt 文件变动时触发
+    - cron: '0 4 * * *'
+  # rules-list.txt文件变动时触发
   push:
     paths:
       - 'rules-list.txt'
 
-# 配置变量，方便修改和扩展
-env:
-  URL_LIST_FILE: rules-list.txt       # 列表文件名
-  OUTPUT_DIR: rules                   # 输出文件夹名
-
 jobs:
-  sync-files:
+  sync-rules:
     runs-on: ubuntu-latest
-
     steps:
-      # 检出代码仓库
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v2
 
-      # 读取 rules-list.txt 文件中的 URL 列表，并过滤掉注释行和空行
-      - name: Read and filter URL list
-        id: read_urls
+      - name: Read rules-list.txt
+        id: read-list
         run: |
-          # 过滤掉注释行（以 # 开头的行）和空行，并将有效 URL 存储到数组中
-          mapfile -t urls < <(grep -v '^#' "${{ env.URL_LIST_FILE }}" | awk 'NF')
-          echo "URLs=${urls[@]}" >> $GITHUB_ENV
+          echo "READING RULES LIST"
+          while IFS= read -r line; do
+            rules_list+=("$line")
+          done < rules-list.txt
+          echo "RULES LIST: ${rules_list[*]}"
+          echo "NUMBER OF RULES: ${#rules_list[@]}"
 
-      # 下载并处理文件
-      - name: Download and process files
+      - name: Download and rename files
+        id: download-files
         run: |
-          mkdir -p "${{ env.OUTPUT_DIR }}"  # 确保输出目录存在
-          
-          # 将 URLs 字符串转换为换行符分隔的列表
-          echo "${{ env.URLS }}" | tr ' ' '\n' | while read -r url; do
-            if [ -z "$url" ]; then
-              continue
-            fi
-            
-            # 提取 URL 的最后一段路径作为前缀
-            prefix=$(echo "$url" | awk -F'/' '{print $(NF-1)}')
-            filename=$(basename "$url")
-            
-            # 构造新的文件名
-            new_filename="${prefix}-${filename}"
-            
-            # 下载文件到指定目录
-            echo "Downloading $url as $new_filename..."
-            curl -sSL "$url" -o "${{ env.OUTPUT_DIR }}/$new_filename"
-            
-            # 检查文件是否成功下载
-            if [ -f "${{ env.OUTPUT_DIR }}/$new_filename" ]; then
-              echo "Successfully downloaded $url as $new_filename"
-            else
-              echo "Failed to download $url"
-            fi
+          echo "DOWNLOADING AND RENAMING FILES"
+          for i in "${!rules_list[@]}"; do
+            url=$(echo "${rules_list[$i]}" | cut -d "/" -f 8-)
+            filename=$(basename "${rules_list[$i]}")
+            dirname=$(dirname "${rules_list[$i]}")
+            new_filename=$(echo "${dirname##*/}_${filename}" | sed 's/\.srs/-srs/')
+            curl -o "rules/${new_filename}" "${rules_list[$i]}"
           done
-
-      # 提交更改到仓库
-      - name: Commit changes
-        run: |
-          git config --global user.name "GitHub Actions"
-          git config --global user.email "actions@github.com"
-          
-          # 强制覆盖旧文件
-          for file in "${{ env.OUTPUT_DIR }}"/*; do
-            git add "$file" || true
-          done
-          
-          # 检查是否有更改需要提交
-          if git diff --staged --quiet; then
-            echo "No changes to commit"
-          else
-            # 提交更改
-            git commit -m "Automated update of rules files"
-            git push
-          fi

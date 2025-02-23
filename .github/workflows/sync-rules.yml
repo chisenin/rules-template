@@ -6,9 +6,9 @@ on:
 
 # ================= 用户配置区 =================
 env:
-  URL_LIST_FILE: 'rules-list.txt'     # URL列表文件
-  TARGET_BASE_DIR: 'rules' # 存储目录
-  PATH_SEGMENTS: 2                 # 使用最后N段路径作为特征码 (推荐2)
+  URL_LIST_FILE: 'rules-list.txt'
+  TARGET_BASE_DIR: 'rules'
+  PATH_SEGMENTS: 2
 # ==============================================
 
 permissions:
@@ -20,8 +20,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Prepare workspace
         run: |
@@ -31,14 +29,11 @@ jobs:
       - name: Download files
         run: |
           while IFS= read -r raw_url; do
-            # 跳过空行和注释
             [[ -z "$raw_url" || "$raw_url" == \#* ]] && continue
             
-            # 清洗URL并提取路径
             url="${raw_url%%[#?]*}"
             path_parts=($(echo "$url" | awk -F/ '{for(i=1;i<=NF;i++) if($i!="") print $i}'))
             
-            # 生成路径特征码（修复变量引用）
             if [ ${#path_parts[@]} -ge ${{ env.PATH_SEGMENTS }} ]; then
               start_idx=$(( ${#path_parts[@]} - ${{ env.PATH_SEGMENTS }} ))
               signature=$(IFS=_ ; echo "${path_parts[*]:$start_idx:${{ env.PATH_SEGMENTS }}}")
@@ -46,12 +41,10 @@ jobs:
               signature="${path_parts[-1]}"
             fi
 
-            # 构建安全文件名
             original_name="${url##*/}"
             safe_name="${signature}_${original_name}"
-            safe_name="${safe_name//[^a-zA-Z0-9_.-]/_}"  # 替换非法字符
+            safe_name="${safe_name//[^a-zA-Z0-9_.-]/_}"
             
-            # 执行下载
             output_path="${{ env.TARGET_BASE_DIR }}/$safe_name"
             echo "下载: $url → $output_path"
             
@@ -71,17 +64,17 @@ jobs:
           
           git add "${{ env.TARGET_BASE_DIR }}"
           if ! git diff --quiet --exit-code; then
-            git commit -m "🔄 Synced files: $(date +%F)"
+            git commit -m " Synced files: $(date +%F)"
             git push
-          else
-            echo "没有检测到文件变更"
           fi
 
-      - name: Upload logs
-        uses: actions/upload-artifact@v3
+      - name: Upload logs (v4)
+        uses: actions/upload-artifact@v4
         with:
           name: sync-logs
-          path: ./sync-logs
+          path: |
+            ./sync-logs/*
+          retention-days: 7
 
   status-notify:
     needs: [file-sync]
@@ -91,5 +84,5 @@ jobs:
       - uses: actions-cool/workflow-status@v1
         with:
           check: ${{ needs.file-sync.result }}
-          success: '✅ 成功同步到目录: ${{ env.TARGET_BASE_DIR }}'
-          failure: '❌ 同步失败，下载日志查看详情'
+          success: '✅ 同步完成至目录: ${{ env.TARGET_BASE_DIR }}'
+          failure: '❌ 同步失败，查看Artifact日志'

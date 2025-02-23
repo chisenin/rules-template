@@ -1,66 +1,57 @@
-name: Sync Rules
+name: Sync Rules Files
 
 on:
-  # 手动触发
-  workflow_dispatch:
-  # 每天 4:00 自动触发
-  schedule:
-    - cron: '0 4 * * *'
-  # rules-list.txt 文件变动时触发
   push:
     paths:
       - 'rules-list.txt'
+  schedule:
+    - cron: '0 4 * * *'
+  workflow_dispatch:
+
+env:
+  RULES_LIST_FILE: 'rules-list.txt'
+  OUTPUT_FOLDER: 'rules'
 
 jobs:
   sync-rules:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+    - name: Checkout repository
+      uses: actions/checkout@v4
 
-      # 定义变量
-      - name: Set variables
-        id: set-variables
-        run: |
-          echo "url_list_file=rules-list.txt" >> $GITHUB_OUTPUT
-          echo "output_folder=rules" >> $GITHUB_OUTPUT
+    - name: Create output folder
+      run: mkdir -p ${{ env.OUTPUT_FOLDER }}
 
-      - name: Read URL list
-        id: read-url-list
-        run: |
-          url_list_file="${{ steps.set-variables.outputs.url_list_file }}"
-          urls=$(cat $url_list_file)
-          echo "urls=$urls" >> $GITHUB_OUTPUT
+    - name: Read rules list
+      id: read-rules
+      run: |
+        RULES=$(cat ${{ env.RULES_LIST_FILE }})
+        echo "rules=$RULES" >> $GITHUB_OUTPUT
 
-      - name: Create output folder
-        run: |
-          output_folder="${{ steps.set-variables.outputs.output_folder }}"
-          mkdir -p $output_folder
+    - name: Download and rename files
+      id: download-files
+      run: |
+        for URL in ${{ steps.read-rules.outputs.rules }}; do
+          FILENAME=$(basename $URL)
+          PATH_SEGMENT=$(echo $URL | awk -F'/' '{print $(NF-2)}')
+          NEW_FILENAME="${PATH_SEGMENT}_${FILENAME}"
+          OUTPUT_PATH="${{ env.OUTPUT_FOLDER }}/$NEW_FILENAME"
 
-      - name: Sync files
-        run: |
-          output_folder="${{ steps.set-variables.outputs.output_folder }}"
-          IFS=$'\n'
-          for url in ${{ steps.read-url-list.outputs.urls }}; do
-            # 提取文件名和路径信息
-            filename=$(basename $url)
-            path_part=$(dirname $url | awk -F '/' '{print $NF}')
-            new_filename="${path_part}-${filename}"
-            output_file="${output_folder}/${new_filename}"
-
-            # 检查文件是否需要更新
-            if [ -f "$output_file" ]; then
-              existing_sha=$(sha256sum $output_file | awk '{print \$1}')
-              remote_sha=$(curl -sL $url | sha256sum | awk '{print \$1}')
-              if [ "$existing_sha" = "$remote_sha" ]; then
-                echo "File $new_filename is up-to-date. Skipping."
-                continue
-              fi
+          # Check if the file already exists and is up-to-date
+          if [ -f "$OUTPUT_PATH" ]; then
+            REMOTE_LAST_MODIFIED=$(curl -sI $URL | grep -i 'last-modified' | tr -d '\r')
+            LOCAL_LAST_MODIFIED=$(stat -c '%y' "$OUTPUT_PATH")
+            if [ "$REMOTE_LAST_MODIFIED" == "$LOCAL_LAST_MODIFIED" ]; then
+              echo "File $NEW_FILENAME is up-to-date, skipping."
+              continue
             fi
+          fi
 
-            # 下载文件
-            echo "Downloading $url to $output_file"
-            if! curl -sL $url -o $output_file; then
-              echo "Failed to download $url. Skipping."
-            fi
-          done
+          # Download the file
+          if curl -s -o "$OUTPUT_PATH" "$URL"; then
+            echo "Downloaded $NEW_FILENAME successfully."
+          else
+            echo "Failed to download $NEW_FILENAME, skipping."
+          fi
+        done

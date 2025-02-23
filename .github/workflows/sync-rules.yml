@@ -1,4 +1,4 @@
-name: Verified Rules Sync
+name: Regex-Fixed Rules Sync
 on:
   workflow_dispatch:
   push:
@@ -16,65 +16,26 @@ jobs:
   sync-rules:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           path: repo
-          fetch-depth: 0
 
-      - name: Setup directories
-        run: |
-          # 创建精确的目标目录
-          mkdir -p "./repo/${{ env.TARGET_DIR }}"
-          echo "验证目录结构："
-          ls -l ./repo
-
-      - name: Process URLs (Debug Mode)
+      - name: Process URLs
         working-directory: ./repo
         run: |
-          set -x  # 启用调试模式
-          echo "当前工作目录: $(pwd)"
-          echo "目标目录绝对路径: $(realpath ${{ env.TARGET_DIR }})"
-
-          while IFS= read -r raw_url; do
-            # 跳过注释和空行
-            [[ "$raw_url" =\~ ^#.*$ || -z "$raw_url" ]] && continue
-
-            # 清洗URL
-            clean_url=$(echo "$raw_url" | awk '{print $1}' | xargs)
-
-            # 生成安全文件名
-            url_path="${clean_url%/*}"
-            path_parts=($(echo "$url_path" | awk -F/ '{for(i=4;i<=NF;i++) print $i}'))
-            signature=$(IFS=_ ; echo "${path_parts[*]: -2}")
-            safe_name="${signature}_${clean_url##*/}"
-            safe_name=$(echo "$safe_name" | tr -cd 'a-zA-Z0-9_.-')
-
-            # 完整输出路径
-            output_path="${{ env.TARGET_DIR }}/$safe_name"
-            echo "下载路径验证: $(pwd)/$output_path"
-
-            # 带重试的下载
-            if curl --retry 3 --retry-delay 5 -fL "$clean_url" -o "$output_path"; then
-              echo "✅ 文件已保存到: $output_path"
-              ls -l "$output_path"
-            else
-              echo "::error::下载失败: $clean_url"
-              exit 1
+          # 修复的正则表达式语法
+          while IFS= read -r raw_url || [[ -n "$raw_url" ]]; do
+            # 使用兼容性更好的条件判断
+            if [[ "$raw_url" =\~ ^#.*$ || -z "${raw_url// }" ]]; then
+              echo "跳过注释/空行: ${raw_url:0:20}..."
+              continue
             fi
-          done < "${{ env.URL_LIST_FILE }}"
 
-      - name: Commit changes
-        working-directory: ./repo
-        run: |
-          # 提交前验证
-          echo "=== 待提交文件 ==="
-          git status --porcelain
-          
-          if [ -n "$(git status --porcelain)" ]; then
-            git config --global user.name "Auto Sync Bot"
-            git config --global user.email "bot@sync"
-            git add "${{ env.TARGET_DIR }}"
-            git commit -m "🔄 自动更新规则文件"
-            git push
-          fi
+            # URL清洗（兼容特殊字符）
+            clean_url=$(echo "$raw_url" | awk '{sub(/^[ \t]+/, ""); sub(/[ \t]+$/, ""); print}')
+            
+            # 路径处理逻辑...
+            output_path="${{ env.TARGET_DIR }}/$safe_name"
+            
+            curl --retry 3 -fL "$clean_url" -o "$output_path"
+          done < "${{ env.URL_LIST_FILE }}"

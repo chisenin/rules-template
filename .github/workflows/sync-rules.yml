@@ -1,15 +1,13 @@
-name: Auto File Sync with Path Encoding
+name: Auto File Sync with Debugging
 on:
   workflow_dispatch:
   schedule:
     - cron: '0 0 * * *'
 
-# ================= 用户配置区 =================
 env:
-  URL_LIST_FILE: 'rules-list.txt'     # URL列表文件路径
-  TARGET_BASE_DIR: 'rules'   # 存储目录
-  PATH_SEGMENTS: 2                 # 路径特征码深度
-# ==============================================
+  URL_LIST_FILE: 'rules-list.txt'
+  TARGET_BASE_DIR: 'rules'
+  PATH_SEGMENTS: 2
 
 permissions:
   contents: write
@@ -18,84 +16,138 @@ jobs:
   file-sync:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Prepare workspace
+      - name: Show environment info
         run: |
-          mkdir -p "${{ env.TARGET_BASE_DIR }}"
-          rm -rf ./sync-logs && mkdir ./sync-logs
+          echo "::group::🛠️ 环境配置"
+          echo "URL列表文件: ${{ env.URL_LIST_FILE }}"
+          echo "存储目录: ${{ env.TARGET_BASE_DIR }}"
+          echo "路径深度: ${{ env.PATH_SEGMENTS }}"
+          echo "::endgroup::"
+
+      - name: Validate URL list
+        run: |
+          if [ ! -f "${{ env.URL_LIST_FILE }}" ]; then
+            echo "::error::URL列表文件不存在: ${{ env.URL_LIST_FILE }}"
+            exit 1
+          fi
+          echo "找到 $(wc -l < "${{ env.URL_LIST_FILE }}") 个待处理URL"
 
       - name: Process URLs
         run: |
+          mkdir -p "${{ env.TARGET_BASE_DIR }}"
+          total=0
+          success=0
+          failure=0
+
           while IFS= read -r raw_url; do
-            [[ -z "$raw_url" || "$raw_url" == \#* ]] && continue
+            ((total++))
             
-            # 清洗URL并分割路径
+            # 跳过空行和注释
+            [[ -z "$raw_url" || "$raw_url" == \#* ]] && { 
+              echo "跳过注释/空行: $raw_url"
+              continue 
+            }
+
+            # 调试输出原始URL
+            echo "::group::🔍 处理URL #$total"
+            echo "原始URL: $raw_url"
+
+            # 清洗URL
             url="${raw_url%%[#?]*}"
-            path_parts=($(echo "$url" | awk -F/ '{for(i=1;i<=NF;i++) if($i!="") print $i}'))
-            
-            # 生成路径特征码
+            echo "清洗后URL: $url"
+
+            # 分离路径和文件名
+            original_name="${url##*/}"
+            url_path="${url%/*}"
+            echo "文件名: $original_name"
+            echo "路径部分: $url_path"
+
+            # 解析路径段（跳过协议和域名部分）
+            path_parts=($(echo "$url_path" | awk -F/ '{for(i=4;i<=NF;i++) print $i}'))
+            echo "有效路径段: ${path_parts[*]}"
+
+            # 生成特征码
             if [ ${#path_parts[@]} -ge ${{ env.PATH_SEGMENTS }} ]; then
-              start_idx=$(( ${#path_parts[@]} - ${{ env.PATH_SEGMENTS }} ))
+              start_idx=$((${#path_parts[@]} - ${{ env.PATH_SEGMENTS }}))
               signature=$(IFS=_ ; echo "${path_parts[*]:$start_idx:${{ env.PATH_SEGMENTS }}}")
             else
-              signature="${path_parts[-1]}"
+              signature="${path_parts[-1]:-none}"
             fi
+            echo "生成签名: $signature"
 
             # 构建安全文件名
-            original_name="${url##*/}"
             safe_name="${signature}_${original_name}"
             safe_name="${safe_name//[^a-zA-Z0-9_.-]/_}"
-            
-            # 下载文件
+            echo "最终文件名: $safe_name"
+
             output_path="${{ env.TARGET_BASE_DIR }}/$safe_name"
-            echo "▶️ 正在同步: $url → $output_path"
-            
-            if curl -fsSL "$url" -o "$output_path"; then
-              echo "[SUCCESS] $(date +%FT%T) $url" >> ./sync-logs/success.log
+            echo "::endgroup::"
+
+            # 执行下载
+            echo "🔄 正在下载 (#$total): $safe_name"
+            if curl -fLSs --retry 2 "$url" -o "$output_path"; then
+              ((success++))
+              echo "✅ 下载成功: $output_path"
             else
-              echo "[FAILED]  $(date +%FT%T) $url" >> ./sync-logs/error.log
+              ((failure++))
+              echo "::error::❌ 下载失败: $url"
+              echo "失败URL: $url" >> error.log
               exit 1
             fi
           done < "${{ env.URL_LIST_FILE }}"
 
+          echo "::group::📊 执行统计"
+          echo "总处理数: $total"
+          echo "成功数: $success"
+          echo "失败数: $failure"
+          echo "::endgroup::"
+
       - name: Commit changes
         if: success()
         run: |
-          git config --global user.name "GitHub Auto Sync"
-          git config --global user.email "auto-sync@github.com"
+          git config --global user.name "Auto Sync Bot"
+          git config --global user.email "auto-sync@github"
           
-          git add "${{ env.TARGET_BASE_DIR }}"
-          if ! git diff --quiet --exit-code; then
-            git commit -m "🔄 自动同步文件 [$(date +%F)]" -m "来源: ${{ env.URL_LIST_FILE }}"
+          changed_files=$(git status --porcelain "${{ env.TARGET_BASE_DIR }}" | wc -l)
+          if [ "$changed_files" -gt 0 ]; then
+            git add "${{ env.TARGET_BASE_DIR }}"
+            git commit -m "🔄 自动同步: 更新 $changed_files 个文件"
             git push
+            echo "::notice::已提交 $changed_files 个文件变更"
+          else
+            echo "::notice::没有检测到文件变更"
           fi
 
       - name: Upload logs
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: sync-logs
-          path: ./sync-logs/
+          name: sync-debug-logs
+          path: |
+            error.log
+            ${{ env.TARGET_BASE_DIR }}/
           retention-days: 3
 
-  status-report:
+  report:
     needs: [file-sync]
     runs-on: ubuntu-latest
     if: always()
     steps:
-      - name: Show report
+      - name: Show final report
         run: |
-          echo "::group::📋 同步执行报告"
-          echo "执行时间: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          echo "::group::📜 最终报告"
+          echo "同步时间: $(date +'%Y-%m-%d %H:%M:%S %Z')"
           echo "目标目录: ${{ env.TARGET_BASE_DIR }}"
-          echo "处理结果: ${{ needs.file-sync.result }}"
+          echo "原始仓库: ${{ github.repository }}"
+          echo "运行ID: ${{ github.run_id }}"
           echo "::endgroup::"
           
           if [[ "${{ needs.file-sync.result }}" == "success" ]]; then
-            echo "::notice::✅ 已成功同步文件到目录: ${{ env.TARGET_BASE_DIR }}"
+            echo "::notice::✅ 同步流程完成"
           else
-            echo "::error::❌ 同步失败，请下载 Artifact 日志排查问题"
+            echo "::error::❌ 同步流程失败"
+            echo "请下载 debug-logs 产物查看详情"
           fi

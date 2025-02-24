@@ -74,8 +74,8 @@ jobs:
             seen_filenames[$filename]=1
           fi
 
-          # Add entry to mapping file with quotes around the URL
-          echo "'$url':$final_filename" >> "${{ env.MAPPING_FILE }}"
+          # Add entry to mapping file without quotes
+          echo "$url:$final_filename" >> "${{ env.MAPPING_FILE }}"
         done < "${{ env.RULES_LIST }}"
 
     - name: Print mapping list
@@ -86,8 +86,6 @@ jobs:
       run: |
         echo "URLs to be downloaded:"
         while IFS=: read -r url final_filename; do
-          # Remove quotes from the URL
-          url=${url//\'/}
           echo "URL: $url -> Final Filename: $final_filename"
         done < "${{ env.MAPPING_FILE }}"
 
@@ -99,9 +97,6 @@ jobs:
           if [[ -z "$url" || "$url" == \#* ]]; then
             continue
           fi
-
-          # Remove quotes from the URL
-          url=${url//\'/}
 
           local_file="${{ env.OUTPUT_DIR }}/${final_filename}"
 

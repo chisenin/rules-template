@@ -74,12 +74,22 @@ jobs:
             seen_filenames[$filename]=1
           fi
 
-          # Add entry to mapping file
-          echo "$url:$final_filename" >> "${{ env.MAPPING_FILE }}"
+          # Add entry to mapping file with quotes around the URL
+          echo "'$url':$final_filename" >> "${{ env.MAPPING_FILE }}"
         done < "${{ env.RULES_LIST }}"
 
     - name: Print mapping list
       run: cat "${{ env.MAPPING_FILE }}"
+
+    - name: Print URLs to be downloaded
+      id: print_urls
+      run: |
+        echo "URLs to be downloaded:"
+        while IFS=: read -r url final_filename; do
+          # Remove quotes from the URL
+          url=${url//\'/}
+          echo "URL: $url -> Final Filename: $final_filename"
+        done < "${{ env.MAPPING_FILE }}"
 
     - name: Download files based on mapping list
       id: download_files
@@ -89,6 +99,9 @@ jobs:
           if [[ -z "$url" || "$url" == \#* ]]; then
             continue
           fi
+
+          # Remove quotes from the URL
+          url=${url//\'/}
 
           local_file="${{ env.OUTPUT_DIR }}/${final_filename}"
 

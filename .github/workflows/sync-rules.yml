@@ -23,14 +23,32 @@ jobs:
     - name: Create output directory if not exists
       run: mkdir -p ${{ env.OUTPUT_DIR }}
 
+    - name: Verify rules-list.txt exists
+      run: |
+        if [ ! -f "${{ env.RULES_LIST }}" ]; then
+          echo "Error: ${RULES_LIST} file does not exist."
+          exit 1
+        fi
+
+    - name: Print contents of rules-list.txt
+      run: cat "${{ env.RULES_LIST }}"
+
     - name: Download and rename files
       id: download_files
       run: |
         while IFS= read -r url; do
+          # Skip empty lines or comments
+          if [[ -z "$url" || "$url" == \#* ]]; then
+            continue
+          fi
+
           # Extract the last path segment from URL
           last_segment=$(basename "$(dirname "$url")")
           filename=$(basename "$url")
           new_filename="${last_segment}-${filename}"
           echo "Downloading $url as $new_filename"
-          wget --continue -O "${{ env.OUTPUT_DIR }}/${new_filename}" "$url" || true
+          wget --continue -O "${{ env.OUTPUT_DIR }}/${new_filename}" "$url" || echo "Failed to download $url"
         done < "${{ env.RULES_LIST }}"
+
+    - name: List files in rules directory
+      run: ls -la "${{ env.OUTPUT_DIR }}"

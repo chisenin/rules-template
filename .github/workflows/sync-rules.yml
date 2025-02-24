@@ -63,6 +63,7 @@ jobs:
             extension="${filename##*.}"
             base="${filename%.*}"
             final_filename="${base}-${last_segment}.${extension}"
+            echo "File $filename already exists. Renaming to $final_filename."
           done
 
           # Add entry to mapping file

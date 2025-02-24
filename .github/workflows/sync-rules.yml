@@ -3,14 +3,14 @@ name: Sync Rules Files
 on:
   push:
     paths:
-      - 'rules-list.txt'
+      - rules-list.txt
   schedule:
     - cron: '0 4 * * *'
   workflow_dispatch:
 
 env:
-  RULES_LIST_FILE: 'rules-list.txt'
-  OUTPUT_FOLDER: 'rules'
+  RULES_LIST: rules-list.txt
+  OUTPUT_DIR: rules
 
 jobs:
   sync-rules:
@@ -20,38 +20,17 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Create output folder
-      run: mkdir -p ${{ env.OUTPUT_FOLDER }}
-
-    - name: Read rules list
-      id: read-rules
-      run: |
-        RULES=$(cat ${{ env.RULES_LIST_FILE }})
-        echo "rules=$RULES" >> $GITHUB_OUTPUT
+    - name: Create output directory if not exists
+      run: mkdir -p ${{ env.OUTPUT_DIR }}
 
     - name: Download and rename files
-      id: download-files
+      id: download_files
       run: |
-        for URL in ${{ steps.read-rules.outputs.rules }}; do
-          FILENAME=$(basename $URL)
-          PATH_SEGMENT=$(echo $URL | awk -F'/' '{print $(NF-2)}')
-          NEW_FILENAME="${PATH_SEGMENT}_${FILENAME}"
-          OUTPUT_PATH="${{ env.OUTPUT_FOLDER }}/$NEW_FILENAME"
-
-          # Check if the file already exists and is up-to-date
-          if [ -f "$OUTPUT_PATH" ]; then
-            REMOTE_LAST_MODIFIED=$(curl -sI $URL | grep -i 'last-modified' | tr -d '\r')
-            LOCAL_LAST_MODIFIED=$(stat -c '%y' "$OUTPUT_PATH")
-            if [ "$REMOTE_LAST_MODIFIED" == "$LOCAL_LAST_MODIFIED" ]; then
-              echo "File $NEW_FILENAME is up-to-date, skipping."
-              continue
-            fi
-          fi
-
-          # Download the file
-          if curl -s -o "$OUTPUT_PATH" "$URL"; then
-            echo "Downloaded $NEW_FILENAME successfully."
-          else
-            echo "Failed to download $NEW_FILENAME, skipping."
-          fi
-        done
+        while IFS= read -r url; do
+          # Extract the last path segment from URL
+          last_segment=$(basename "$(dirname "$url")")
+          filename=$(basename "$url")
+          new_filename="${last_segment}-${filename}"
+          echo "Downloading $url as $new_filename"
+          wget --continue -O "${{ env.OUTPUT_DIR }}/${new_filename}" "$url" || true
+        done < "${{ env.RULES_LIST }}"

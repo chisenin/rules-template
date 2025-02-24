@@ -11,7 +11,6 @@ on:
 env:
   RULES_LIST: rules-list.txt
   OUTPUT_DIR: rules
-  MAPPING_FILE: mapping.txt
 
 jobs:
   sync-rules:
@@ -34,25 +33,31 @@ jobs:
     - name: Print contents of rules-list.txt
       run: cat "${{ env.RULES_LIST }}"
 
-    - name: Generate mapping list
-      id: generate_mapping
+    - name: Download and rename files
+      id: download_files
       run: |
-        > "${{ env.MAPPING_FILE }}"
         while IFS= read -r url; do
           # Skip empty lines or comments
           if [[ -z "$url" || "$url" == \#* ]]; then
             continue
           fi
 
-          # Ensure the URL has the correct protocol
-          if [[ ! "$url" =~ ^https?:// ]]; then
-            echo "Invalid URL: $url. URLs must start with http:// or https://"
-            continue
-          fi
-
           # Extract the last path segment from URL
           last_segment=$(basename "$(dirname "$url")")
           filename=$(basename "$url")
+          local_file="${{ env.OUTPUT_DIR }}/${filename}"
+
+          # Check if the file already exists and is up to date
+          if [ -f "$local_file" ]; then
+            echo "Checking if $filename needs updating..."
+            current_hash=$(sha256sum "$local_file" | awk '{print $1}')
+            new_hash=$(wget --spider --server-response "$url" 2>&1 | grep ETag | awk '{print $2}' | tr -d '"')
+            
+            if [ "$current_hash" == "$new_hash" ]; then
+              echo "$filename is already up to date. Skipping download."
+              continue
+            fi
+          fi
 
           # Determine the final filename to use
           final_filename="$filename"
@@ -66,39 +71,9 @@ jobs:
             echo "File $filename already exists. Renaming to $final_filename."
           done
 
-          # Add entry to mapping file
-          echo "$url:$final_filename" >> "${{ env.MAPPING_FILE }}"
-        done < "${{ env.RULES_LIST }}"
-
-    - name: Print mapping list
-      run: cat "${{ env.MAPPING_FILE }}"
-
-    - name: Download files based on mapping list
-      id: download_files
-      run: |
-        while IFS=: read -r url final_filename; do
-          # Skip empty lines or comments
-          if [[ -z "$url" || "$url" == \#* ]]; then
-            continue
-          fi
-
-          local_file="${{ env.OUTPUT_DIR }}/${final_filename}"
-
-          # Check if the file already exists and is up to date
-          if [ -f "$local_file" ]; then
-            echo "Checking if $final_filename needs updating..."
-            current_hash=$(sha256sum "$local_file" | awk '{print $1}')
-            new_hash=$(wget --spider --server-response "$url" 2>&1 | grep ETag | awk '{print $2}' | tr -d '"')
-            
-            if [ "$current_hash" == "$new_hash" ]; then
-              echo "$final_filename is already up to date. Skipping download."
-              continue
-            fi
-          fi
-
           echo "Downloading $url as $final_filename"
-          wget --continue -O "$local_file" "$url" || echo "Failed to download $url"
-        done < "${{ env.MAPPING_FILE }}"
+          wget --continue -O "${{ env.OUTPUT_DIR }}/${final_filename}" "$url" || echo "Failed to download $url"
+        done < "${{ env.RULES_LIST }}"
 
     - name: List files in rules directory
       run: ls -la "${{ env.OUTPUT_DIR }}"

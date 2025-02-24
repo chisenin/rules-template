@@ -46,8 +46,22 @@ jobs:
           last_segment=$(basename "$(dirname "$url")")
           filename=$(basename "$url")
           new_filename="${last_segment}-${filename}"
+          local_file="${{ env.OUTPUT_DIR }}/${new_filename}"
+
+          # Check if the file already exists and is up to date
+          if [ -f "$local_file" ]; then
+            echo "Checking if $new_filename needs updating..."
+            current_hash=$(sha256sum "$local_file" | awk '{print $1}')
+            new_hash=$(wget --spider --server-response "$url" 2>&1 | grep ETag | awk '{print $2}' | tr -d '"')
+            
+            if [ "$current_hash" == "$new_hash" ]; then
+              echo "$new_filename is already up to date. Skipping download."
+              continue
+            fi
+          fi
+
           echo "Downloading $url as $new_filename"
-          wget --continue -O "${{ env.OUTPUT_DIR }}/${new_filename}" "$url" || echo "Failed to download $url"
+          wget --continue -O "$local_file" "$url" || echo "Failed to download $url"
         done < "${{ env.RULES_LIST }}"
 
     - name: List files in rules directory

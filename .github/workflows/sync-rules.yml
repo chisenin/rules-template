@@ -45,7 +45,7 @@ jobs:
           # Extract the last path segment from URL
           last_segment=$(basename "$(dirname "$url")")
           filename=$(basename "$url")
-          new_filename="${last_segment}-${filename}"
+          new_filename="${filename}"
           local_file="${{ env.OUTPUT_DIR }}/${new_filename}"
 
           # Check if the file already exists and is up to date
@@ -62,6 +62,13 @@ jobs:
 
           echo "Downloading $url as $new_filename"
           wget --continue -O "$local_file" "$url" || echo "Failed to download $url"
+
+          # Check for duplicate filenames and rename if necessary
+          if [ "$(find "${{ env.OUTPUT_DIR }}" -type f -name "$new_filename" | wc -l)" -gt 1 ]; then
+            new_filename="${last_segment}-${filename}"
+            mv "$local_file" "${{ env.OUTPUT_DIR }}/${new_filename}"
+            echo "Renamed to $new_filename due to duplicate filename."
+          fi
         done < "${{ env.RULES_LIST }}"
 
     - name: List files in rules directory

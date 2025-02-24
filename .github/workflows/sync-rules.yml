@@ -44,6 +44,12 @@ jobs:
             continue
           fi
 
+          # Ensure the URL has the correct protocol
+          if [[ ! "$url" =~ ^https?:// ]]; then
+            echo "Invalid URL: $url. URLs must start with http:// or https://"
+            continue
+          fi
+
           # Extract the last path segment from URL
           last_segment=$(basename "$(dirname "$url")")
           filename=$(basename "$url")

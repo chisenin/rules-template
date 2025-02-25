@@ -1,1 +1,9 @@
 URL,Remote_Filename,Local_Filename,Last_Modified
+,private.srs,geoip-private.srs,None
+,private.srs,geosite-private.srs,None
+,telegram.srs,geoip-telegram.srs,None
+,telegram.srs,geosite-telegram.srs,None
+,netflix.srs,geoip-netflix.srs,None
+,netflix.srs,geosite-netflix.srs,None
+,apple.srs,geoip-apple.srs,None
+,apple.srs,geosite-apple.srs,None

@@ -3,7 +3,8 @@ name: Sync Rules Files
 on:
   push:
     paths:
-      - rules-list.txt
+      - 'rules-list.txt'
+      - '*.csv'  # 允许通过推送CSV文件来更新URL列表
   schedule:
     - cron: '0 4 * * *'
   workflow_dispatch:
@@ -11,7 +12,7 @@ on:
 env:
   RULES_LIST: rules-list.txt
   OUTPUT_DIR: rules
-  CSV_FILE: mapping.csv
+  CSV_FILE: rules-mapping.csv  # 更明确的文件名
 
 jobs:
   sync-rules:
@@ -27,24 +28,31 @@ jobs:
     - name: Verify rules-list.txt exists
       run: |
         if [ ! -f "${{ env.RULES_LIST }}" ]; then
-          echo "Error: ${RULES_LIST} file does not exist."
+          echo "Error: ${{ env.RULES_LIST }} file does not exist."
           exit 1
         fi
 
-    - name: Print contents of rules-list.txt
-      run: cat "${{ env.RULES_LIST }}"
-
-    - name: Generate CSV mapping list
-      id: generate_csv_mapping
+    - name: Read existing CSV file
+      id: read_csv
       run: |
-        > "${{ env.CSV_FILE }}"
-        echo "URL,Final_Filename" >> "${{ env.CSV_FILE }}"
+        existing_urls=()
+        while IFS=',' read -r url local_filename hash; do
+          existing_urls+=("$url")
+        done < "${{ env.CSV_FILE }}" 2>/dev/null  # 允许CSV文件不存在
+        echo "::set-output name=existing_urls::$(printf "%s\n" "${existing_urls[@]}")"
+
+    - name: Generate updated CSV mapping list
+      id: generate_csv
+      run: |
+        > temp_rules-mapping.csv
+        echo "URL,Local_Filename,Hash" >> temp_rules-mapping.csv
+
         declare -A seen_filenames
-        declare -A renamed_filenames
+        declare -A final_filenames
 
         while IFS= read -r url; do
-          # Skip empty lines or comments
-          if [[ -z "$url" || "$url" == \#* ]]; then
+          # Skip empty lines, comments, and URLs already in the CSV
+          if [[ -z "$url" || "$url" == \#* || " ${{ steps.read_csv.outputs.existing_urls }} " =~ " $url " ]]; then
             continue
           fi
 
@@ -54,86 +62,35 @@ jobs:
             continue
           fi
 
-          # Extract the last two path segments from URL
-          path_segments=($(dirname "$url" | tr '/' '\n'))
-          last_segment="${path_segments[-1]}"
-          second_last_segment="${path_segments[-2]}"
+          # Download the file and calculate its hash
           filename=$(basename "$url")
+          local_file="${{ env.OUTPUT_DIR }}/$filename"
+          temp_file="$local_file.tmp"
+          wget --continue -O "$temp_file" "$url" || { echo "Failed to download $url"; continue; }
+          file_hash=$(sha256sum "$temp_file" | awk '{print $1}')
 
-          # Determine the final filename to use
-          base="${second_last_segment}-${last_segment}-${filename}"
-          final_filename="$base"
+          # Determine the final filename to use, handling conflicts
+          base_no_ext="${filename%.*}"
           counter=1
-
-          # Check if the filename has been seen before
-          if [[ -n "${seen_filenames[$base]}" ]]; then
-            # If a file with the same name exists, rename both the existing and new file
-            extension="${filename##*.}"
-            unique_base="${second_last_segment}-${last_segment}-${base%.*}"
-
-            # Rename existing files
-            for existing_file in "${{ env.OUTPUT_DIR }}/$unique_base"*"$extension"; do
-              if [ -f "$existing_file" ]; then
-                new_existing_filename="${unique_base}-${counter}.${extension}"
-                mv "$existing_file" "${{ env.OUTPUT_DIR }}/$new_existing_filename"
-                echo "Renamed existing file: $(basename "$existing_file") -> $new_existing_filename"
-                ((counter++))
-              fi
-            done
-
-            # Set the new final filename
-            final_filename="${unique_base}-${counter}.${extension}"
-            echo "File $filename already exists. Renaming to $final_filename."
+          final_filename="$base_no_ext"
+          while [[ -n "${seen_filenames[$final_filename]}" ]]; do
+            final_filename="${base_no_ext}-${counter}"
             ((counter++))
-          fi
+          done
+
+          # Move the downloaded file to its final location
+          mv "$temp_file" "$local_file"
+
+          # Record the URL, final filename, and hash in the CSV
+          echo "$url,$local_file,$file_hash" >> temp_rules-mapping.csv
 
           # Mark the filename as seen
-          seen_filenames[$base]=1
-          renamed_filenames[$final_filename]=1
-
-          # Add entry to CSV mapping file
-          echo "$url,$final_filename" >> "${{ env.CSV_FILE }}"
+          seen_filenames[$final_filename]=1
+          final_filenames["$url"]="$local_file"
         done < "${{ env.RULES_LIST }}"
 
-    - name: Print CSV mapping list
-      run: cat "${{ env.CSV_FILE }}"
-
-    - name: Print URLs to be downloaded
-      id: print_urls
-      run: |
-        echo "URLs to be downloaded:"
-        tail -n +2 "${{ env.CSV_FILE }}" | while IFS=',' read -r url final_filename; do
-          echo "URL: $url -> Final Filename: $final_filename"
-        done
-
-    - name: Download files based on CSV mapping list
-      id: download_files
-      run: |
-        > temp_mapping.csv
-        echo "URL,Final_Filename" >> temp_mapping.csv
-        tail -n +2 "${{ env.CSV_FILE }}" | while IFS=',' read -r url final_filename; do
-          local_file="${{ env.OUTPUT_DIR }}/${final_filename}"
-
-          # Check if the file already exists and is up to date
-          if [ -f "$local_file" ]; then
-            echo "Checking if $final_filename needs updating..."
-            current_hash=$(sha256sum "$local_file" | awk '{print $1}')
-            new_hash=$(wget --spider --server-response "$url" 2>&1 | grep ETag | awk '{print $2}' | tr -d '"')
-            
-            if [ "$current_hash" == "$new_hash" ]; then
-              echo "$final_filename is already up to date. Skipping download."
-              continue
-            fi
-          fi
-
-          echo "Downloading $url as $final_filename"
-          wget --continue -O "$local_file" "$url" || echo "Failed to download $url"
-          # Add to temp_mapping.csv for retention
-          echo "$url,$final_filename" >> temp_mapping.csv
-        done
-
-        # Move temp_mapping.csv to CSV_FILE
-        mv temp_mapping.csv "${{ env.CSV_FILE }}"
+        # Move the temp CSV to the real CSV file
+        mv temp_rules-mapping.csv "${{ env.CSV_FILE }}"
 
     - name: List files in rules directory
       run: ls -la "${{ env.OUTPUT_DIR }}"
@@ -146,10 +103,10 @@ jobs:
         git add "${{ env.CSV_FILE }}"
 
     - name: Commit changes
-      run: |
-        git diff-index --quiet HEAD || git commit -m "Update rules files from rules-list.txt"
-
-    - name: Push changes
+      run: |        git
+ diff-index --quiet HEAD || git commit -m "Update rules files from rules-list.txt and CSV"
+    -
+ name: Push changes
       uses: ad-m/github-push-action@master
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}

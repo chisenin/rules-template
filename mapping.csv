@@ -1,9 +1,0 @@
-URL,Local_Filename,Hash
-https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geoip/private.srs,private.srs,,f70eddc8d1bed904627fd411ecd4a337de499f7e868d2dfc3a24d16e81012308
-https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geosite/private.srs,geo-geosite-private.srs,,f75629c046f847f676a4cdfcc982aa2147c567121d9edcfd49ec0370d8592bcc
-https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geoip/telegram.srs,telegram.srs,,40a3cc7d77f4f39360de9dc497d3fd62de4c79deefa69781194b64b52282b8bb
-https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geosite/telegram.srs,geo-geosite-telegram.srs,,67c99123abb6af796e013d66260025a82557dcca71eb0090df9cbd474540a36f
-https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geoip/netflix.srs,netflix.srs,,4864c6a89ccb2c3ecd8bc917e7334a55e22c206afa442900ffe8c8defe3559e5
-https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geosite/netflix.srs,geo-geosite-netflix.srs,,f61df8e427d810fbb26cb37473aebf5363d25fe8477f6bae71cb8911db30aed4
-https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo-lite/geoip/apple.srs,apple.srs,,c17fd0d052285c9d1222afd82a861e3fb930bd77d795e718f981d74e9b0b7df7
-https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geosite/apple.srs,geo-geosite-apple.srs,,7a10aae386b66659693cd1a607becda89a41c1f7152657e9ca3cb41c1f38835c

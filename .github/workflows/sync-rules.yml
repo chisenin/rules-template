@@ -58,8 +58,13 @@ jobs:
         mapping_file_path = "${{ env.MAPPING_FILE }}"
         output_dir = "${{ env.OUTPUT_DIR }}"
 
+        # Log paths for debugging
+        print(f"Rules list path: {rules_list_path}")
+        print(f"Mapping file path: {mapping_file_path}")
+
         # Check if mapping file exists and create header if not
         if not os.path.isfile(mapping_file_path):
+            print(f"Mapping file {mapping_file_path} does not exist, creating new one.")
             with open(mapping_file_path, mode='w', newline='') as file:
                 writer = csv.writer(file)
                 writer.writerow(['URL', 'Remote_Filename', 'Local_Filename', 'Last_Modified'])
@@ -73,17 +78,18 @@ jobs:
 
         # Read URLs and last modified times from rules-list.txt
         new_mappings = {}
-        for url in requests.get(f"https://raw.githubusercontent.com/${{ github.repository }}/main/{rules_list_path}").text.splitlines():
-            url = url.strip()
-            if url.startswith(('http://', 'https://')):
-                response = requests.head(url, allow_redirects=True)
-                remote_filename = os.path.basename(url)
-                last_modified = response.headers.get('last-modified', 'Unknown')
-                last_modified_time = datetime.strptime(last_modified, '%a, %d %b %Y %H:%M:%S %Z') if last_modified != 'Unknown' else None
-                
-                # Add to new_mappings if not in existing or different last modified time
-                if url not in existing_mappings or existing_mappings[url]['Last_Modified'] != str(last_modified_time):
-                    new_mappings[url] = {'Remote_Filename': remote_filename, 'Last_Modified': str(last_modified_time)}
+        with open(rules_list_path, mode='r') as file:
+            for line in file:
+                url = line.strip()
+                if url.startswith(('http://', 'https://')):
+                    response = requests.head(url, allow_redirects=True)
+                    remote_filename = os.path.basename(url)
+                    last_modified = response.headers.get('last-modified', 'Unknown')
+                    last_modified_time = datetime.strptime(last_modified, '%a, %d %b %Y %H:%M:%S %Z') if last_modified != 'Unknown' else None
+                    
+                    # Add to new_mappings if not in existing or different last modified time
+                    if url not in existing_mappings or existing_mappings[url]['Last_Modified'] != str(last_modified_time):
+                        new_mappings[url] = {'Remote_Filename': remote_filename, 'Last_Modified': str(last_modified_time)}
 
         # Handle file name conflicts
         filename_count = {}

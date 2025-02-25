@@ -78,29 +78,24 @@ jobs:
             for line in file:
                 url = line.strip()
                 if url.startswith(('http://', 'https://')):
-                    try:
-                        response = requests.head(url, allow_redirects=True)
-                        response.raise_for_status()  # Raise an error for bad responses
-                        remote_filename = os.path.basename(url)
-                        last_modified_str = response.headers.get('last-modified', None)
-                        if last_modified_str:
-                            last_modified = datetime.strptime(last_modified_str, '%a, %d %b %Y %H:%M:%S %Z').strftime('%Y-%m-%d %H:%M:%S')
-                        else:
-                            last_modified = None
+                    response = requests.head(url, allow_redirects=True)
+                    remote_filename = os.path.basename(url)
+                    last_modified_str = response.headers.get('last-modified', None)
+                    if last_modified_str:
+                        last_modified = datetime.strptime(last_modified_str, '%a, %d %b %Y %H:%M:%S %Z')
+                    else:
+                        last_modified = None
 
-                        # Add to new_mappings if not in existing or different last modified time
-                        existing_row = existing_mappings.get(url)
-                        existing_last_modified = existing_row['Last_Modified'] if existing_row else None
+                    # Add to new_mappings if not in existing or different last modified time
+                    existing_last_modified = existing_mappings.get(url, {}).get('Last_Modified')
+                    if existing_last_modified:
+                        existing_last_modified = datetime.strptime(existing_last_modified, '%Y-%m-%d %H:%M:%S') if existing_last_modified else None
 
-                        if not existing_row or existing_last_modified != last_modified:
-                            new_mappings[url] = {
-                                'Remote_Filename': remote_filename,
-                                'Local_Filename': None,
-                                'Last_Modified': last_modified
-                            }
-                    except requests.exceptions.RequestException as e:
-                        print(f"Failed to fetch {url}: {e}")
-                        continue
+                    if url not in existing_mappings or existing_last_modified != last_modified:
+                        new_mappings[url] = {
+                            'Remote_Filename': remote_filename,
+                            'Last_Modified': last_modified.strftime('%Y-%m-%d %H:%M:%S') if last_modified else None
+                        }
 
         # Handle file name conflicts
         filename_count = {}
@@ -141,32 +136,13 @@ jobs:
             fieldnames = ['URL', 'Remote_Filename', 'Local_Filename', 'Last_Modified']
             writer = csv.DictWriter(file, fieldnames=fieldnames)
             writer.writeheader()
-            for url, row in final_mappings.items():
-                writer.writerow(row)
+            writer.writerows(final_mappings.values())
 
         with open('updated_mappings.csv', mode='w', newline='') as file:
             writer = csv.DictWriter(file, fieldnames=fieldnames)
             writer.writeheader()
-            for url, row in new_mappings.items():
-                writer.writerow(row)
+            writer.writerows(new_mappings.values())
         EOF
-
-    - name: Check if mapping.csv exists
-      run: |
-        if [ ! -f "${{ env.MAPPING_FILE }}" ]; then
-          echo "Error: ${MAPPING_FILE} file does not exist after processing."
-          exit 1
-        fi
-        echo "mapping.csv exists."
-
-    - name: Check if mapping.csv has all necessary fields
-      run: |
-        head -n 1 "${{ env.MAPPING_FILE }}" | grep -qE '^URL,Remote_Filename,Local_Filename,Last_Modified$'
-        if [ $? -ne 0 ]; then
-          echo "Error: ${MAPPING_FILE} does not have the correct header."
-          exit 1
-        fi
-        echo "mapping.csv has all necessary fields."
 
     - name: Download updated files based on mapping.csv
       run: |

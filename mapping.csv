@@ -1,0 +1,11 @@
+URL,Remote_Filename,Local_Filename,Last_Modified
+,geosite-youtube.srs,geosite-youtube.srs,
+,adblock_reject.srs,adblock_reject.srs,
+,private.srs,geoip-private.srs,
+,private.srs,geosite-private.srs,
+,telegram.srs,geoip-telegram.srs,
+,telegram.srs,geosite-telegram.srs,
+,netflix.srs,geoip-netflix.srs,
+,netflix.srs,geosite-netflix.srs,
+,apple.srs,geoip-apple.srs,
+,apple.srs,geosite-apple.srs,

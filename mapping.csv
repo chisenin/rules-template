@@ -1,4 +1,5 @@
 URL,Remote_Filename,Local_Filename,Last_Modified
+,adblock_reject.srs,adblock_reject.srs,None
 ,private.srs,geoip-private.srs,None
 ,private.srs,geosite-private.srs,None
 ,telegram.srs,geoip-telegram.srs,None

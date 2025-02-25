@@ -4,7 +4,6 @@ on:
   push:
     paths:
       - rules-list.txt
-      - mapping.csv
   schedule:
     - cron: '0 4 * * *'
   workflow_dispatch:
@@ -59,95 +58,93 @@ jobs:
         output_dir = "${{ env.OUTPUT_DIR }}"
 
         # Check if mapping file exists and create header if not
-        if not os.path.isfile(mapping_file_path):
+        mappings = {
+            'urls': {},
+            'filename_count': {}
+        }
+        if os.path.isfile(mapping_file_path):
+            with open(mapping_file_path, mode='r', newline='') as file:
+                reader = csv.DictReader(file)
+                for row in reader:
+                    mappings['urls'][row['URL']] = {
+                        'Remote_Filename': row['Remote_Filename'],
+                        'Local_Filename': row['Local_Filename'],
+                        'Last_Modified': datetime.strptime(row['Last_Modified'], '%Y-%m-%d %H:%M:%S') if row['Last_Modified'] else None
+                    }
+                    # Count occurrences of each local filename
+                    if row['Local_Filename'] in mappings['filename_count']:
+                        mappings['filename_count'][row['Local_Filename']] += 1
+                    else:
+                        mappings['filename_count'][row['Local_Filename']] = 1
+        else:
             print(f"Mapping file {mapping_file_path} does not exist, creating new one.")
-            with open(mapping_file_path, mode='w', newline='') as file:
-                writer = csv.writer(file)
-                writer.writerow(['URL', 'Remote_Filename', 'Local_Filename', 'Last_Modified'])
-
-        # Read existing mappings from CSV
-        existing_mappings = {}
-        with open(mapping_file_path, mode='r', newline='') as file:
-            reader = csv.DictReader(file)
-            for row in reader:
-                existing_mappings[row['URL']] = row
 
         # Read URLs and last modified times from rules-list.txt
-        new_mappings = {}
-        with open(rules_list_path, mode='r') as file:
-            for line in file:
-                url = line.strip()
-                if url.startswith(('http://', 'https://')):
-                    response = requests.head(url, allow_redirects=True)
-                    remote_filename = os.path.basename(url)
-                    last_modified_str = response.headers.get('last-modified', None)
-                    if last_modified_str:
-                        last_modified = datetime.strptime(last_modified_str, '%a, %d %b %Y %H:%M:%S %Z')
+        for line in open(rules_list_path, mode='r'):
+            url = line.strip()
+            if url.startswith(('http://', 'https://')):
+                response = requests.head(url, allow_redirects=True)
+                remote_filename = os.path.basename(url)
+                last_modified_str = response.headers.get('last-modified', None)
+                if last_modified_str:
+                    last_modified = datetime.strptime(last_modified_str, '%a, %d %b %Y %H:%M:%S %Z')
+                else:
+                    last_modified = None
+
+                if url in mappings['urls']:
+                    existing_last_modified = mappings['urls'][url]['Last_Modified']
+                    if last_modified != existing_last_modified:
+                        print(f"Update for URL: {url}, Remote Filename: {remote_filename}")
+                        local_filename = mappings['urls'][url]['Local_Filename']
+                        # Need to adjust local filenames if there are any issues
+                        if mappings['filename_count'][local_filename] > 1:
+                            url_segments = url.split('/')
+                            last_segment = url_segments[-2]
+                            local_filename = f"{last_segment}-{remote_filename}"
+                            mappings['filename_count'][local_filename] = 1  # Mark as handled
+                        mappings['urls'][url]['Local_Filename'] = local_filename
+                        mappings['urls'][url]['Last_Modified'] = last_modified
+                else:
+                    print(f"New URL: {url}, Remote Filename: {remote_filename}")
+                    local_filename = remote_filename
+                    if local_filename in mappings['filename_count']:
+                        url_segments = url.split('/')
+                        last_segment = url_segments[-2]
+                        local_filename = f"{last_segment}-{remote_filename}"
+                        mappings['filename_count'][local_filename] = 1  # Mark as handled
                     else:
-                        last_modified = None
+                        mappings['filename_count'][local_filename] = 1
 
-                    # Add to new_mappings if not in existing or different last modified time
-                    existing_last_modified = existing_mappings.get(url, {}).get('Last_Modified')
-                    if existing_last_modified:
-                        existing_last_modified = datetime.strptime(existing_last_modified, '%Y-%m-%d %H:%M:%S') if existing_last_modified else None
-
-                    if url not in existing_mappings or existing_last_modified != last_modified:
-                        new_mappings[url] = {
-                            'Remote_Filename': remote_filename,
-                            'Last_Modified': last_modified.strftime('%Y-%m-%d %H:%M:%S') if last_modified else None
-                        }
-
-        # Handle file name conflicts
-        filename_count = {}
-        for url, info in new_mappings.items():
-            remote_filename = info['Remote_Filename']
-            local_filename = remote_filename
-
-            # Count occurrences of each local filename
-            if local_filename in filename_count:
-                filename_count[local_filename] += 1
-            else:
-                filename_count[local_filename] = 1
-
-        # Adjust local filenames if conflicts exist
-        for url, info in new_mappings.items():
-            remote_filename = info['Remote_Filename']
-            local_filename = remote_filename
-            if filename_count[remote_filename] > 1:
-                # Extract the last path segment from URL
-                url_segments = url.split('/')
-                last_segment = url_segments[-2]
-                local_filename = f"{last_segment}-{remote_filename}"
-                filename_count[local_filename] = 1  # Mark as handled
-
-            # Assign the new local filename
-            new_mappings[url]['Local_Filename'] = local_filename
-
-        # Merge new mappings into existing mappings
-        for url, info in new_mappings.items():
-            existing_mappings[url] = info
-
-        # Remove entries not present in rules-list.txt
-        urls_to_keep = set(new_mappings.keys())
-        final_mappings = {k: v for k, v in existing_mappings.items() if k in urls_to_keep}
+                    mappings['urls'][url] = {
+                        'Remote_Filename': remote_filename,
+                        'Local_Filename': local_filename,
+                        'Last_Modified': last_modified
+                    }
 
         # Write the updated mappings to CSV
         with open(mapping_file_path, mode='w', newline='') as file:
             fieldnames = ['URL', 'Remote_Filename', 'Local_Filename', 'Last_Modified']
             writer = csv.DictWriter(file, fieldnames=fieldnames)
             writer.writeheader()
-            writer.writerows(final_mappings.values())
+            for url, info in mappings['urls'].items():
+                last_modified_str = info['Last_Modified'].strftime('%Y-%m-%d %H:%M:%S') if info['Last_Modified'] else None
+                writer.writerow({
+                    'URL': url,
+                    'Remote_Filename': info['Remote_Filename'],
+                    'Local_Filename': info['Local_Filename'],
+                    'Last_Modified': last_modified_str
+                })
 
+        # Create a CSV with only new or updated mappings
         with open('updated_mappings.csv', mode='w', newline='') as file:
+            fieldnames = ['URL', 'Remote_Filename', 'Local_Filename', 'Last_Modified']
             writer = csv.DictWriter(file, fieldnames=fieldnames)
             writer.writeheader()
-            writer.writerows(new_mappings.values())
+            writer.writerows([v for k, v in mappings['urls'].items()])
         EOF
 
     - name: Download updated files based on mapping.csv
       run: |
-        declare -A seen_hashes
-
         # Read URLs with updates from updated_mappings.csv
         if [ -f "updated_mappings.csv" ]; then
           while IFS=',' read -r url remote_filename local_filename last_modified; do

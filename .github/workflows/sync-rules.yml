@@ -45,7 +45,7 @@ jobs:
           exit 1
         fi
 
-    - name: Process rules-list.txt with Python
+    - name: Process rules-list.txt and update mapping.csv with Python
       id: process_rules
       run: |
         python3 << 'EOF'
@@ -58,7 +58,7 @@ jobs:
         mapping_file_path = "${{ env.MAPPING_FILE }}"
         output_dir = "${{ env.OUTPUT_DIR }}"
 
-        # Check if mapping file exists and create it if not
+        # Check if mapping file exists and create header if not
         if not os.path.isfile(mapping_file_path):
             with open(mapping_file_path, mode='w', newline='') as file:
                 writer = csv.writer(file)
@@ -71,63 +71,66 @@ jobs:
             for row in reader:
                 existing_mappings[row['URL']] = row
 
-        # Read URLs from rules-list.txt and check last modified time
+        # Read URLs and last modified times from rules-list.txt
         new_mappings = {}
-        with open(rules_list_path, mode='r') as file:
-            for line in file:
-                url = line.strip()
-                if url.startswith(('http://', 'https://')):
-                    response = requests.head(url, allow_redirects=True)
-                    remote_filename = os.path.basename(url)
-                    last_modified = response.headers.get('last-modified', 'Unknown')
-                    last_modified_time = datetime.strptime(last_modified, '%a, %d %b %Y %H:%M:%S %Z') if last_modified != 'Unknown' else None
-                    
-                    # Check if URL is new or updated
-                    if url not in existing_mappings or existing_mappings[url]['Last_Modified'] != str(last_modified_time):
-                        new_mappings[url] = {'Remote_Filename': remote_filename, 'Last_Modified': str(last_modified_time)}
-
-        # Update mapping file
-        if len(new_mappings) > 0:
-            seen_local_filenames = {}
-            for url, info in new_mappings.items():
-                remote_filename = info['Remote_Filename']
-                last_modified = info['Last_Modified']
+        for url in requests.get(f"https://raw.githubusercontent.com/${{ github.repository }}/main/{rules_list_path}").text.splitlines():
+            url = url.strip()
+            if url.startswith(('http://', 'https://')):
+                response = requests.head(url, allow_redirects=True)
+                remote_filename = os.path.basename(url)
+                last_modified = response.headers.get('last-modified', 'Unknown')
+                last_modified_time = datetime.strptime(last_modified, '%a, %d %b %Y %H:%M:%S %Z') if last_modified != 'Unknown' else None
                 
-                # Construct unique local filename
-                local_filename = remote_filename
-                if local_filename in seen_local_filenames:
-                    url_segments = url.split('/')
-                    prev_segment = url_segments[-2]
-                    new_local_filename = f"{prev_segment}-{remote_filename}"
-                    if new_local_filename in seen_local_filenames:
-                        counter = 1
-                        while f"{prev_segment}-{remote_filename}-{counter}" in seen_local_filenames:
-                            counter += 1
-                        local_filename = f"{prev_segment}-{remote_filename}-{counter}"
-                    else:
-                        local_filename = new_local_filename
-                seen_local_filenames[local_filename] = True
-                
-                existing_mappings[url] = {'URL': url, 'Remote_Filename': remote_filename, 'Local_Filename': local_filename, 'Last_Modified': last_modified}
-            
-            # Remove entries not present in rules-list.txt
-            urls_to_keep = set(new_mappings.keys())
-            final_mappings = {k: v for k, v in existing_mappings.items() if k in urls_to_keep}
-            
-            # Write the updated mappings to CSV
-            with open(mapping_file_path, mode='w', newline='') as file:
-                fieldnames = ['URL', 'Remote_Filename', 'Local_Filename', 'Last_Modified']
-                writer = csv.DictWriter(file, fieldnames=fieldnames)
-                writer.writeheader()
-                writer.writerows(final_mappings.values())
+                # Add to new_mappings if not in existing or different last modified time
+                if url not in existing_mappings or existing_mappings[url]['Last_Modified'] != str(last_modified_time):
+                    new_mappings[url] = {'Remote_Filename': remote_filename, 'Last_Modified': str(last_modified_time)}
 
-            with open('updated_mappings.csv', mode='w', newline='') as file:
-                writer = csv.DictWriter(file, fieldnames=fieldnames)
-                writer.writeheader()
-                writer.writerows(new_mappings.values())
+        # Handle file name conflicts
+        filename_count = {}
+        for url, info in new_mappings.items():
+            remote_filename = info['Remote_Filename']
+            local_filename = remote_filename
+            
+            # Count occurrences of each local filename
+            if local_filename in filename_count:
+                filename_count[local_filename] += 1
+            else:
+                filename_count[local_filename] = 1
+            
+        # Adjust local filenames if conflicts exist
+        for url, info in new_mappings.items():
+            remote_filename = info['Remote_Filename']
+            local_filename = remote_filename
+            if filename_count[remote_filename] > 1:
+                # Extract the last path segment from URL
+                url_segments = url.split('/')
+                last_segment = url_segments[-2]
+                local_filename = f"{last_segment}-{remote_filename}"
+                filename_count[local_filename] = 1  # Mark as handled
+            
+            # Assign the new local filename
+            new_mappings[url]['Local_Filename'] = local_filename
 
-        elif os.path.isfile('updated_mappings.csv'):
-            os.remove('updated_mappings.csv')
+        # Merge new mappings into existing mappings
+        for url, info in new_mappings.items():
+            existing_mappings[url] = info
+
+        # Remove entries not present in rules-list.txt
+        urls_to_keep = set(new_mappings.keys())
+        final_mappings = {k: v for k, v in existing_mappings.items() if k in urls_to_keep}
+
+        # Write the updated mappings to CSV
+        with open(mapping_file_path, mode='w', newline='') as file:
+            fieldnames = ['URL', 'Remote_Filename', 'Local_Filename', 'Last_Modified']
+            writer = csv.DictWriter(file, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(final_mappings.values())
+
+        with open('updated_mappings.csv', mode='w', newline='') as file:
+            writer = csv.DictWriter(file, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(new_mappings.values())
+
         EOF
 
     - name: Print updated mappings

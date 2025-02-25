@@ -11,8 +11,8 @@ on:
 
 env:
   RULES_LIST: rules-list.txt
+  MAPPING_FILE: mapping.csv
   OUTPUT_DIR: rules
-  CSV_FILE: mapping.csv
 
 jobs:
   sync-rules:
@@ -25,21 +25,39 @@ jobs:
     - name: Create output directory if not exists
       run: mkdir -p ${{ env.OUTPUT_DIR }}
 
-    - name: Verify rules-list.txt exists
+    - name: Validate rules-list.txt or mapping.csv exists with valid URLs
       run: |
-        if [ ! -f "${{ env.RULES_LIST }}" ]; then
-          echo "Error: ${RULES_LIST} file does not exist."
+        if [ ! -f "${{ env.RULES_LIST }}" ] && [ ! -f "${{ env.MAPPING_FILE }}" ]; then
+          echo "Error: Neither ${RULES_LIST} nor ${MAPPING_FILE} file exists."
           exit 1
         fi
 
-    - name: Verify mapping.csv exists or create an empty one
-      run: |
-        if [ ! -f "${{ env.CSV_FILE }}" ]; then
-          echo "URL,Local_Filename,Hash" > "${{ env.CSV_FILE }}"
+        if [ -f "${{ env.RULES_LIST }}" ]; then
+          valid_rules=$(grep -E '^https?://' "${{ env.RULES_LIST }}" | wc -l)
+          if [ "$valid_rules" -eq 0 ]; then
+            echo "Warning: ${RULES_LIST} contains no valid URLs."
+          fi
+        fi
+
+        if [ -f "${{ env.MAPPING_FILE }}" ]; then
+          valid_mappings=$(tail -n +2 "${{ env.MAPPING_FILE }}" | cut -d',' -f1 | grep -E '^https?://' | wc -l)
+          if [ "$valid_mappings" -eq 0 ]; then
+            echo "Warning: ${MAPPING_FILE} contains no valid URLs."
+          fi
+        fi
+
+        if [ "$valid_rules" -eq 0 ] && [ "$valid_mappings" -eq 0 ]; then
+          echo "Error: No valid URLs found in either ${RULES_LIST} or ${MAPPING_FILE}."
+          exit 1
         fi
 
     - name: Print contents of rules-list.txt
+      if: ${{ steps.validate_files.outputs.valid_rules_list == 'true' }}
       run: cat "${{ env.RULES_LIST }}"
+
+    - name: Print contents of mapping.csv
+      if: ${{ steps.validate_files.outputs.valid_mapping_file == 'true' }}
+      run: cat "${{ env.MAPPING_FILE }}"
 
     - name: Generate or update CSV mapping list
       id: generate_or_update_csv_mapping
@@ -50,78 +68,71 @@ jobs:
         declare -A current_hashes
 
         # Read existing mappings from CSV
-        tail -n +2 "${{ env.CSV_FILE }}" | while IFS=',' read -r url local_filename hash; do
-          current_hashes["$url"]=$hash
-          seen_filenames["$local_filename"]=$url
-        done
+        if [ -f "${{ env.MAPPING_FILE }}" ]; then
+          tail -n +2 "${{ env.MAPPING_FILE }}" | while IFS=',' read -r url local_filename hash; do
+            current_hashes["$url"]=$hash
+            seen_filenames["$local_filename"]=$url
+          done
+        fi
 
         # Read URLs from rules-list.txt
-        while IFS= read -r url; do
-          # Skip empty lines or comments
-          if [[ -z "$url" || "$url" == \#* ]]; then
-            continue
-          fi
+        if [ -f "${{ env.RULES_LIST }}" ]; then
+          while IFS= read -r url; do
+            # Skip empty lines or comments
+            if [[ -z "$url" || "$url" == \#* ]]; then
+              continue
+            fi
 
-          # Ensure the URL has the correct protocol
-          if [[ ! "$url" =~ ^https?:// ]]; then
-            echo "Invalid URL: $url. URLs must start with http:// or https://"
-            continue
-          fi
+            # Ensure the URL has the correct protocol
+            if [[ ! "$url" =~ ^https?:// ]]; then
+              echo "Invalid URL: $url. URLs must start with http:// or https://"
+              continue
+            fi
 
-          # Extract the last two path segments from URL
-          path_segments=($(dirname "$url" | tr '/' '\n'))
-          last_segment="${path_segments[-1]}"
-          second_last_segment="${path_segments[-2]}"
-          filename=$(basename "$url")
+            # Extract the last path segment from URL
+            filename=$(basename "$url")
 
-          # Determine the final filename to use
-          final_filename="$filename"
-          counter=1
+            # Determine the final filename to use
+            final_filename="$filename"
 
-          # Check if the filename has been seen before
-          while [[ -n "${seen_filenames[$final_filename]}" ]]; do
-            # If a file with the same name exists, rename both files
-            extension="${filename##*.}"
-            base="${filename%.*}"
-            unique_base="${second_last_segment}-${last_segment}-${base}"
+            # Check if the filename has been seen before
+            if [[ -n "${seen_filenames[$final_filename]}" && "${seen_filenames[$final_filename]}" != "$url" ]]; then
+              # If a file with the same name exists, generate a new filename using URL's last two segments
+              path_segments=($(dirname "$url" | tr '/' '\n'))
+              last_segment="${path_segments[-1]}"
+              second_last_segment="${path_segments[-2]}"
+              base="${second_last_segment}-${last_segment}-${filename}"
+              final_filename="$base"
+              counter=1
 
-            # Rename existing files
-            for existing_file in "${{ env.OUTPUT_DIR }}/$base"*"$extension"; do
-              if [ -f "$existing_file" ]; then
-                existing_filename=$(basename "$existing_file")
-                new_existing_filename="${unique_base}-${counter}.${extension}"
-                mv "$existing_file" "${{ env.OUTPUT_DIR }}/$new_existing_filename"
-                echo "Renamed existing file: $existing_filename -> $new_existing_filename"
-                seen_filenames["$new_existing_filename"]="${seen_filenames[$existing_filename]}"
-                unset seen_filenames["$existing_filename"]
+              while [[ -n "${seen_filenames[$final_filename]}" ]]; do
+                # Generate unique filename
+                extension="${filename##*.}"
+                unique_base="${second_last_segment}-${last_segment}-${base%.*}"
+                final_filename="${unique_base}-${counter}.${extension}"
                 ((counter++))
-              fi
-            done
+              done
+            fi
 
-            # Set the new final filename
-            final_filename="${unique_base}-${counter}.${extension}"
-            echo "File $filename already exists. Renaming to $final_filename."
-            ((counter++))
-          done
+            # Mark the filename as seen
+            seen_filenames["$final_filename"]=$url
 
-          # Mark the filename as seen
-          seen_filenames["$final_filename"]=$url
+            # Add entry to temp_mapping.csv
+            echo "$url,$final_filename,${current_hashes[$url]:-}" >> temp_mapping.csv
+          done < "${{ env.RULES_LIST }}"
+        fi
 
-          # Add entry to temp_mapping.csv
-          echo "$url,$final_filename,${current_hashes[$url]:-}" >> temp_mapping.csv
-        done < "${{ env.RULES_LIST }}"
-
-        # Move temp_mapping.csv to CSV_FILE
-        mv temp_mapping.csv "${{ env.CSV_FILE }}"
+        # Move temp_mapping.csv to MAPPING_FILE
+        mv temp_mapping.csv "${{ env.MAPPING_FILE }}"
 
     - name: Print CSV mapping list
-      run: cat "${{ env.CSV_FILE }}"
+      run: cat "${{ env.MAPPING_FILE }}"
 
     - name: Print URLs to be downloaded
       id: print_urls
       run: |
         echo "URLs to be downloaded:"
-        tail -n +2 "${{ env.CSV_FILE }}" | while IFS=',' read -r url local_filename hash; do
+        tail -n +2 "${{ env.MAPPING_FILE }}" | while IFS=',' read -r url local_filename hash; do
           echo "URL: $url -> Local Filename: $local_filename -> Hash: $hash"
         done
 
@@ -131,11 +142,11 @@ jobs:
         declare -A seen_hashes
 
         # Read existing hashes from CSV
-        tail -n +2 "${{ env.CSV_FILE }}" | while IFS=',' read -r url local_filename hash; do
+        tail -n +2 "${{ env.MAPPING_FILE }}" | while IFS=',' read -r url local_filename hash; do
           seen_hashes["$url"]=$hash
         done
 
-        tail -n +2 "${{ env.CSV_FILE }}" | while IFS=',' read -r url local_filename hash; do
+        tail -n +2 "${{ env.MAPPING_FILE }}" | while IFS=',' read -r url local_filename hash; do
           local_file="${{ env.OUTPUT_DIR }}/${local_filename}"
 
           # Check if the file already exists and is up to date
@@ -156,7 +167,7 @@ jobs:
           if [ -f "$local_file" ]; then
             new_hash=$(sha256sum "$local_file" | awk '{print $1}')
             # Update CSV with new hash
-            sed -i "s|^\($url,.*\)$|\1,$new_hash|" "${{ env.CSV_FILE }}"
+            sed -i "s|^\($url,.*\)$|\1,$new_hash|" "${{ env.MAPPING_FILE }}"
           fi
         done
 
@@ -168,7 +179,7 @@ jobs:
         git config --global user.name "GitHub Actions"
         git config --global user.email "actions@github.com"
         git add "${{ env.OUTPUT_DIR }}"
-        git add "${{ env.CSV_FILE }}"
+        git add "${{ env.MAPPING_FILE }}"
 
     - name: Commit changes
       run: |

@@ -131,17 +131,7 @@ jobs:
             writer.writerows(new_mappings.values())
         EOF
 
-    - name: Verify updated_mappings.csv creation
-      if: steps.process_rules.outcome == 'success'
-      run: |
-        if [ ! -f "updated_mappings.csv" ]; then
-          echo "Error: updated_mappings.csv was not created."
-          exit 1
-        fi
-        echo "Success: updated_mappings.csv exists and is ready for download."
-
     - name: Download updated files based on mapping.csv
-      if: steps.verify_mappings.outcome == 'success'
       run: |
         if [ -f "updated_mappings.csv" ]; then
           while IFS=',' read -r url remote_filename local_filename last_modified; do
@@ -152,11 +142,8 @@ jobs:
           echo "No new or updated files to download."
         fi
 
-    - name: Verify downloaded files
-      if: steps.download_files.outcome == 'success'
-      run: |
-        echo "Downloaded files in ${OUTPUT_DIR}:"
-        ls -la "${{ env.OUTPUT_DIR }}"
+    - name: List files in rules directory
+      run: ls -la "${{ env.OUTPUT_DIR }}"
 
     - name: Add changes to staging
       run: |
@@ -169,18 +156,7 @@ jobs:
       run: |
         git diff-index --quiet HEAD || git commit -m "Update rules files from rules-list.txt"
 
-    - name: Verify commit
-      if: steps.commit_changes.outcome == 'success'
-      run: |
-        echo "Changes committed successfully."
-        git log -1
-
     - name: Push changes
       uses: ad-m/github-push-action@master
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Verify push
-      if: success()
-      run: |
-        echo "Successfully pushed changes."

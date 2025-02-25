@@ -1,5 +1,5 @@
 URL,Local_Filename,Hash
-https://raw.githubusercontent.com/REIJI007/AdBlock_Rule_For_Sing-box/main/adblock_reject.srs,adblock_reject.srs,,3267ee8cf45f15d3bdb368a4f7061820223d1f4a99f584b1be489873de04d62b
+https://raw.githubusercontent.com/REIJI007/AdBlock_Rule_For_Sing-box/main/adblock_reject.srs,adblock_reject.srs,,78ed85e5b59676464fdc6ee9d113b404b540fa981cc07c5b78f2b53096d46d31
 https://github.com/SagerNet/sing-geosite/raw/refs/heads/rule-set/geosite-openai.srs,geosite-openai.srs,,c2b263c29524d103bb9edd22d0ccc55f21511b80b58b67640ccf0da5f9e0da01
 https://github.com/chisenin/rules-template/raw/refs/heads/main/custom_direct.json,custom_direct.json,,a25c09375105a078de40f69cb1bf8caf6718f7c8178e8cdc0375778dbc96e3c5
 https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geoip/private.srs,private.srs,,f70eddc8d1bed904627fd411ecd4a337de499f7e868d2dfc3a24d16e81012308

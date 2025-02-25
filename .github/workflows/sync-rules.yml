@@ -151,12 +151,16 @@ jobs:
                 writer.writerow(row)
         EOF
 
-    - name: Check if mapping.csv has all necessary fields
+    - name: Check if mapping.csv exists
       run: |
         if [ ! -f "${{ env.MAPPING_FILE }}" ]; then
           echo "Error: ${MAPPING_FILE} file does not exist after processing."
           exit 1
         fi
+        echo "mapping.csv exists."
+
+    - name: Check if mapping.csv has all necessary fields
+      run: |
         head -n 1 "${{ env.MAPPING_FILE }}" | grep -qE '^URL,Remote_Filename,Local_Filename,Last_Modified$'
         if [ $? -ne 0 ]; then
           echo "Error: ${MAPPING_FILE} does not have the correct header."

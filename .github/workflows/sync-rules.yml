@@ -170,6 +170,9 @@ jobs:
                 del_file.write(f"{filename}\n")
 
         # 更新 mapping.csv
+        print(f"Temp mapping file path (before replace): {temp_mapping_file_path}")
+        print(f"Current working directory in Python script: {os.getcwd()}")
+
         os.replace(temp_mapping_file_path, mapping_file_path)
         EOF
 

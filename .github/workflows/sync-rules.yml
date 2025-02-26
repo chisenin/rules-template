@@ -22,17 +22,21 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
+        # actions/checkout 步骤通常不需要显式设置 working-directory，因为它本身就负责 checkout 代码到工作区
 
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.x'
+      working-directory: ${{ github.workspace }}  # 显式设置工作目录
 
     - name: Install Python dependencies
       run: pip install requests
+      working-directory: ${{ github.workspace }}  # 显式设置工作目录
 
     - name: Create output directory if not exists
       run: mkdir -p ${{ env.OUTPUT_DIR }}
+      working-directory: ${{ github.workspace }}  # 显式设置工作目录
 
     - name: Process rules-list.txt and update mapping.csv with Python
       id: process_rules
@@ -170,11 +174,12 @@ jobs:
                 del_file.write(f"{filename}\n")
 
         # 更新 mapping.csv
-        print(f"Temp mapping file path (before replace): {temp_mapping_file_path}")
-        print(f"Current working directory in Python script: {os.getcwd()}")
+        print(f"Temp mapping file path (before replace): {temp_mapping_file_path}") # 保留 Print 语句，方便诊断
+        print(f"Current working directory in Python script: {os.getcwd()}") # 保留 Print 语句，方便诊断
 
         os.replace(temp_mapping_file_path, mapping_file_path)
         EOF
+      working-directory: ${{ github.workspace }}  # 显式设置工作目录
 
     - name: Download updated files based on temp_mapping.csv
       run: |
@@ -188,6 +193,7 @@ jobs:
         else
           echo "No new or updated files to download."
         fi
+      working-directory: ${{ github.workspace }}  # 显式设置工作目录
 
     - name: Delete obsolete files based on del_list.txt
       run: |
@@ -198,15 +204,18 @@ jobs:
         else
           echo "No obsolete files to delete."
         fi
+      working-directory: ${{ github.workspace }}  # 显式设置工作目录
 
     - name: Update mapping.csv
       run: |
         cp "${{ env.TEMP_MAPPING_FILE }}" "${{ env.MAPPING_FILE }}"
         rm "${{ env.TEMP_MAPPING_FILE }}"
         rm "${{ env.DEL_LIST_FILE }}"
+      working-directory: ${{ github.workspace }}  # 显式设置工作目录
 
     - name: List files in rules directory
       run: ls -la "${{ env.OUTPUT_DIR }}"
+      working-directory: ${{ github.workspace }}  # 显式设置工作目录
 
     - name: Add changes to staging
       run: |
@@ -214,12 +223,15 @@ jobs:
         git config --global user.email "actions@github.com"
         git add "${{ env.OUTPUT_DIR }}"
         git add "${{ env.MAPPING_FILE }}"
+      working-directory: ${{ github.workspace }}  # 显式设置工作目录
 
     - name: Commit changes
       run: |
         git diff-index --quiet HEAD || git commit -m "Update rules files from rules-list.txt"
+      working-directory: ${{ github.workspace }}  # 显式设置工作目录
 
     - name: Push changes
       uses: ad-m/github-push-action@master
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
+      working-directory: ${{ github.workspace }}  # 显式设置工作目录

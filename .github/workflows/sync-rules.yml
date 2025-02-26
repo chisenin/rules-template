@@ -62,7 +62,7 @@ jobs:
         if not os.path.isfile(mapping_file_path):
             with open(mapping_file_path, mode='w', newline='') as file:
                 writer = csv.writer(file)
-                writer.writerow(['URL', 'Remote_Filename', 'Local_Filename', 'Hash', 'Last_Modified'])
+                writer.writerow(['URL', 'Remote_Filename', 'Local_Filename', 'Hash'])
 
         # Read existing mappings from CSV
         existing_mappings = {}
@@ -72,7 +72,7 @@ jobs:
                 for row in reader:
                     existing_mappings[row['URL']] = row
 
-        # Read URLs and last modified times from rules-list.txt
+        # Read URLs from rules-list.txt
         new_mappings = {}
         with open(rules_list_path, mode='r') as file:
             for line in file:
@@ -80,12 +80,6 @@ jobs:
                 if url.startswith(('http://', 'https://')):
                     response = requests.head(url, allow_redirects=True)
                     remote_filename = os.path.basename(urlparse(response.url).path)
-                    last_modified_str = response.headers.get('last-modified', None)
-                    if last_modified_str:
-                        last_modified = datetime.strptime(last_modified_str, '%a, %d %b %Y %H:%M:%S %Z')
-                    else:
-                        last_modified = None
-                    last_modified_formatted = last_modified.strftime('%Y-%m-%d %H:%M:%S') if last_modified else None
 
                     # Calculate remote hash
                     response = requests.get(url, stream=True)
@@ -94,17 +88,13 @@ jobs:
                     # Initialize Local_Filename to Remote_Filename
                     local_filename = remote_filename
 
-                    # Add to new_mappings if not in existing or different last modified time or hash
-                    existing_last_modified = existing_mappings.get(url, {}).get('Last_Modified')
+                    # Add to new_mappings if not in existing or different hash
                     existing_hash = existing_mappings.get(url, {}).get('Hash')
-                    if existing_last_modified:
-                        existing_last_modified = datetime.strptime(existing_last_modified, '%Y-%m-%d %H:%M:%S') if existing_last_modified else None
-                    if url not in existing_mappings or existing_last_modified != last_modified or existing_hash != remote_hash:
+                    if url not in existing_mappings or existing_hash != remote_hash:
                         new_mappings[url] = {
                             'Remote_Filename': remote_filename,
                             'Local_Filename': local_filename,  # Ensure Local_Filename is initialized
-                            'Hash': remote_hash,
-                            'Last_Modified': last_modified_formatted
+                            'Hash': remote_hash
                         }
 
         # Handle file name conflicts
@@ -139,7 +129,7 @@ jobs:
         if not os.path.isfile(temp_mapping_file_path):
             with open(temp_mapping_file_path, mode='w', newline='') as file:
                 writer = csv.writer(file)
-                writer.writerow(['URL', 'Remote_Filename', 'Local_Filename', 'Hash', 'Last_Modified'])
+                writer.writerow(['URL', 'Remote_Filename', 'Local_Filename', 'Hash'])
 
         # Compare and update temp_mapping.csv
         with open(temp_mapping_file_path, mode='a', newline='') as temp_file:
@@ -148,10 +138,9 @@ jobs:
                 remote_filename = info['Remote_Filename']
                 local_filename = info['Local_Filename']
                 hash_value = info['Hash']
-                last_modified = info['Last_Modified']
 
                 # Write to temp_mapping.csv
-                writer.writerow([url, remote_filename, local_filename, hash_value, last_modified])
+                writer.writerow([url, remote_filename, local_filename, hash_value])
 
         # Identify files to delete
         del_list = []
@@ -168,7 +157,7 @@ jobs:
     - name: Download updated files based on temp_mapping.csv
       run: |
         if [ -f "${{ env.TEMP_MAPPING_FILE }}" ]; then
-          while IFS=',' read -r url remote_filename local_filename hash last_modified; do
+          while IFS=',' read -r url remote_filename local_filename hash; do
             local_file="${{ env.OUTPUT_DIR }}/${local_filename}"
             if ! test -f "$local_file" || [ "$(md5sum $local_file | awk '{ print $1 }')" != "$hash" ]; then
               wget --continue -O "$local_file" "$url" || echo "Failed to download $url. Skipping."

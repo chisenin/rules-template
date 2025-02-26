@@ -91,6 +91,9 @@ jobs:
                     response = requests.get(url, stream=True)
                     remote_hash = hashlib.md5(response.content).hexdigest()
 
+                    # Initialize Local_Filename to Remote_Filename
+                    local_filename = remote_filename
+
                     # Add to new_mappings if not in existing or different last modified time or hash
                     existing_last_modified = existing_mappings.get(url, {}).get('Last_Modified')
                     existing_hash = existing_mappings.get(url, {}).get('Hash')
@@ -99,6 +102,7 @@ jobs:
                     if url not in existing_mappings or existing_last_modified != last_modified or existing_hash != remote_hash:
                         new_mappings[url] = {
                             'Remote_Filename': remote_filename,
+                            'Local_Filename': local_filename,  # Ensure Local_Filename is initialized
                             'Hash': remote_hash,
                             'Last_Modified': last_modified_formatted
                         }
@@ -109,7 +113,7 @@ jobs:
 
         for url, info in new_mappings.items():
             remote_filename = info['Remote_Filename']
-            local_filename = remote_filename
+            local_filename = info['Local_Filename']
 
             # Count occurrences of each remote filename
             if remote_filename in filename_count:

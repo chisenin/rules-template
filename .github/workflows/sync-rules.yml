@@ -26,9 +26,10 @@ jobs:
 
     - name: Set up Python
       uses: actions/setup-python@v4
-      working-directory: ${{ github.workspace }}  # 显式设置工作目录，位置已修正
+      working-directory: ${{ github.workspace }}
       with:
         python-version: '3.x'
+
 
     - name: Install Python dependencies
       run: pip install requests
@@ -40,7 +41,7 @@ jobs:
 
     - name: Process rules-list.txt and update mapping.csv with Python
       id: process_rules
-      working-directory: ${{ github.workspace }}  # 显式设置工作目录
+      working-directory: ${{ github.workspace }}  # 正确的位置， 且 *只能有一个*
       run: |
         python3 << 'EOF'
         import csv

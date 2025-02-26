@@ -45,14 +45,13 @@ jobs:
         from urllib.parse import urlparse
         from datetime import datetime
 
-        rules_list_path = "${{ env.RULES_LIST }}" # 规则列表文件路径
-        mapping_file_path = "${{ env.MAPPING_FILE }}" # 映射文件路径
-        temp_mapping_file_path = "${{ env.TEMP_MAPPING_FILE }}" # 临时映射文件路径
-        del_list_file_path = "${{ env.DEL_LIST_FILE }}" # 删除列表文件路径
-        output_dir = "${{ env.OUTPUT_DIR }}" # 输出目录
+        rules_list_path = "${{ env.RULES_LIST }}"
+        mapping_file_path = "${{ env.MAPPING_FILE }}"
+        temp_mapping_file_path = "${{ env.TEMP_MAPPING_FILE }}"
+        del_list_file_path = "${{ env.DEL_LIST_FILE }}"
+        output_dir = "${{ env.OUTPUT_DIR }}"
 
         def calculate_hash(file_path):
-            # 计算文件 MD5 哈希值
             hash_md5 = hashlib.md5()
             with open(file_path, "rb") as f:
                 for chunk in iter(lambda: f.read(4096), b""):
@@ -79,8 +78,8 @@ jobs:
             for line in file:
                 url = line.strip()
                 if url.startswith(('http://', 'https://')):
-                    response = requests.head(url, allow_redirects=True) # 获取重定向后的 URL
-                    remote_filename = os.path.basename(urlparse(response.url).path) # 从 URL 中提取文件名
+                    response = requests.head(url, allow_redirects=True)
+                    remote_filename = os.path.basename(urlparse(response.url).path)
 
                     # 计算远程文件哈希值
                     response = requests.get(url, stream=True)
@@ -97,10 +96,17 @@ jobs:
                             'Hash': remote_hash
                         }
 
+
+        # 如果临时映射文件不存在，则创建并写入 CSV header (始终创建 temp_mapping.csv)
+        with open(temp_mapping_file_path, mode='w', newline='') as temp_file: # 始终创建并写入 header
+            writer = csv.writer(temp_file)
+            writer.writerow(['URL', 'Remote_Filename', 'Local_Filename', 'Hash'])
+
+
         # 处理文件名冲突
-        filename_count = {} # 统计 remote_filename 在 new_mappings 中的出现次数
-        conflict_remote_filenames = set() # 存储所有冲突的 remote_filename
-        existing_local_filenames = set() # 存储 existing_mappings 中的所有 Local_Filename
+        filename_count = {}
+        conflict_remote_filenames = set()
+        existing_local_filenames = set()
         for row in existing_mappings.values():
             existing_local_filenames.add(row['Local_Filename'])
 
@@ -122,9 +128,7 @@ jobs:
 
 
         # 调整所有冲突的 remote_filename 的 Local_Filename
-        updated_mappings = {} # 用于存储更新后的所有 mappings (包括 existing 和 new)
-
-        # 1. 处理 existing_mappings 中冲突的文件名
+        updated_mappings = {}
         for url, row in existing_mappings.items():
             remote_filename = row['Remote_Filename']
             local_filename = row['Local_Filename']
@@ -134,7 +138,6 @@ jobs:
                 local_filename = f"{last_segment}-{remote_filename}"
             updated_mappings[url] = {'Remote_Filename': remote_filename, 'Local_Filename': local_filename, 'Hash': row['Hash']} # 保留 Hash 值
 
-        # 2. 处理 new_mappings 中冲突的文件名 (或者也可能和 existing 冲突的文件名)
         for url, info in new_mappings.items():
             remote_filename = info['Remote_Filename']
             local_filename = info['Local_Filename']
@@ -146,21 +149,15 @@ jobs:
             updated_mappings[url] = {'Remote_Filename': remote_filename, 'Local_Filename': local_filename, 'Hash': hash_value}
 
 
-        # 如果临时映射文件不存在，则创建并写入 CSV header
-        if not os.path.isfile(temp_mapping_file_path):
-            with open(temp_mapping_file_path, mode='w', newline='') as file:
-                writer = csv.writer(file)
-                writer.writerow(['URL', 'Remote_Filename', 'Local_Filename', 'Hash'])
-
         # 更新临时映射文件 temp_mapping.csv (写入 updated_mappings)
-        with open(temp_mapping_file_path, mode='w', newline='') as temp_file: # 注意: 这里使用 'w' 覆盖写入
+        with open(temp_mapping_file_path, mode='w', newline='') as temp_file: # 再次以 'w' 模式打开，确保文件已创建
             writer = csv.writer(temp_file)
-            writer.writerow(['URL', 'Remote_Filename', 'Local_Filename', 'Hash']) # 写入 header
+            writer.writerow(['URL', 'Remote_Filename', 'Local_Filename', 'Hash']) # 再次写入 header (虽然之前已经写入，但确保万无一失)
             for url, info in updated_mappings.items():
-                writer.writerow([url, info['URL' if 'URL' in info else 'Remote_Filename'], info['Remote_Filename'], info['Local_Filename'], info['Hash']]) # 写入更新后的 mappings
+                writer.writerow([url, info['URL' if 'URL' in info else 'Remote_Filename'], info['Remote_Filename'], info['Local_Filename'], info['Hash']])
 
 
-        # 找出需要删除的文件 (基于 updated_mappings 和 existing_mappings 的比较)
+        # 找出需要删除的文件
         del_list = []
         updated_urls = set(updated_mappings.keys())
         for url, row in existing_mappings.items():
@@ -172,19 +169,8 @@ jobs:
             for filename in del_list:
                 del_file.write(f"{filename}\n")
 
-        # 更新 mapping.csv (将 temp_mapping.csv 复制为 mapping.csv)
-        os.replace(temp_mapping_file_path, mapping_file_path) # 使用 os.replace 更安全
-
-        # 找出需要删除的文件
-        del_list = []
-        for url in existing_mappings:
-            if url not in new_mappings:
-                del_list.append(existing_mappings[url]['Local_Filename']) # 将需要删除的本地文件名添加到 del_list
-
-        # 将删除列表写入 del_list.txt
-        with open(del_list_file_path, mode='w') as del_file:
-            for filename in del_list:
-                del_file.write(f"{filename}\n")
+        # 更新 mapping.csv
+        os.replace(temp_mapping_file_path, mapping_file_path)
         EOF
 
     - name: Download updated files based on temp_mapping.csv

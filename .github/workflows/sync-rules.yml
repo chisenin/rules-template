@@ -1,3 +1,39 @@
+name: Sync Rules Files
+
+on:
+  push:
+    paths:
+      - rules-list.txt
+  schedule:
+    - cron: '0 4 * * *'
+  workflow_dispatch:
+
+env:
+  RULES_LIST: rules-list.txt
+  MAPPING_FILE: mapping.csv
+  TEMP_MAPPING_FILE: temp_mapping.csv
+  DEL_LIST_FILE: del_list.txt
+  OUTPUT_DIR: rules
+
+jobs:
+  sync-rules:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.x'
+
+    - name: Install Python dependencies
+      run: pip install requests
+
+    - name: Create output directory if not exists
+      run: mkdir -p ${{ env.OUTPUT_DIR }}
+
     - name: Process rules-list.txt and update mapping.csv with Python
       id: process_rules
       run: |

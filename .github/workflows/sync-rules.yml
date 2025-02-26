@@ -26,9 +26,9 @@ jobs:
 
     - name: Set up Python
       uses: actions/setup-python@v4
+      working-directory: ${{ github.workspace }}  # 显式设置工作目录，位置已修正
       with:
         python-version: '3.x'
-      working-directory: ${{ github.workspace }}  # 显式设置工作目录
 
     - name: Install Python dependencies
       run: pip install requests
@@ -40,6 +40,7 @@ jobs:
 
     - name: Process rules-list.txt and update mapping.csv with Python
       id: process_rules
+      working-directory: ${{ github.workspace }}  # 显式设置工作目录
       run: |
         python3 << 'EOF'
         import csv
@@ -232,6 +233,6 @@ jobs:
 
     - name: Push changes
       uses: ad-m/github-push-action@master
+      working-directory: ${{ github.workspace }}  # 显式设置工作目录，位置已修正
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
-      working-directory: ${{ github.workspace }}  # 显式设置工作目录

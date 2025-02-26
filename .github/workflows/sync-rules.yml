@@ -82,20 +82,21 @@ jobs:
         # Compare and update temp_mapping.csv
         with open(temp_mapping_file_path, mode='a', newline='') as temp_file:
             writer = csv.writer(temp_file)
-            seen_filenames = {}
+            filename_count = {}
 
             for url in new_urls:
                 response = requests.head(url, allow_redirects=True)
                 remote_filename = os.path.basename(url)
                 local_filename = remote_filename
 
-                # Handle file name conflicts
-                if remote_filename in seen_filenames:
-                    seen_filenames[remote_filename] += 1
+                # Count occurrences of each remote_filename
+                if remote_filename in filename_count:
+                    filename_count[remote_filename] += 1
                 else:
-                    seen_filenames[remote_filename] = 1
+                    filename_count[remote_filename] = 1
 
-                if seen_filenames[remote_filename] > 1:
+                # Adjust local_filename if conflict exists
+                if filename_count[remote_filename] > 1:
                     parsed_url = urlparse(url)
                     last_segment = parsed_url.path.split('/')[-2]
                     local_filename = f"{last_segment}-{remote_filename}"

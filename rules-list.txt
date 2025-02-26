@@ -3,20 +3,8 @@ https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geoip/privat
 # private_geosite
 https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geosite/private.srs
 
-# telegram_geoip
-https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geoip/telegram.srs
+# anti_ad
+https://raw.githubusercontent.com/REIJI007/AdBlock_Rule_For_Sing-box/main/adblock_reject.srs
 
-# telegram_geosite
-https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geosite/telegram.srs
-
-# netflix_geoip
-https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geoip/netflix.srs
-
-# netflix_geosite
-https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geosite/netflix.srs
-
-# apple_geoip
-https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo-lite/geoip/apple.srs
-
-# apple_geosite
-https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geosite/apple.srs
+# openai_geosite
+https://github.com/SagerNet/sing-geosite/raw/refs/heads/rule-set/geosite-openai.srs

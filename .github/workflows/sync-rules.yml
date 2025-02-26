@@ -1,119 +1,203 @@
-- name: Process rules-list.txt and update mapping.csv with Python
-  id: process_rules
-  run: |
-    python3 << 'EOF'
-    import csv
-    import os
-    import requests
-    import hashlib
-    from urllib.parse import urlparse
-    from datetime import datetime
+name: Sync Rules Files
 
-    rules_list_path = "${{ env.RULES_LIST }}"
-    mapping_file_path = "${{ env.MAPPING_FILE }}"
-    temp_mapping_file_path = "${{ env.TEMP_MAPPING_FILE }}"
-    del_list_file_path = "${{ env.DEL_LIST_FILE }}"
-    output_dir = "${{ env.OUTPUT_DIR }}"
+on:
+  push:
+    paths:
+      - rules-list.txt
+  schedule:
+    - cron: '0 4 * * *'
+  workflow_dispatch:
 
-    def calculate_hash(file_path):
-        hash_md5 = hashlib.md5()
-        with open(file_path, "rb") as f:
-            for chunk in iter(lambda: f.read(4096), b""):
-                hash_md5.update(chunk)
-        return hash_md5.hexdigest()
+env:
+  RULES_LIST: rules-list.txt
+  MAPPING_FILE: mapping.csv
+  TEMP_MAPPING_FILE: temp_mapping.csv
+  DEL_LIST_FILE: del_list.txt
+  OUTPUT_DIR: rules
 
-    # Check if mapping file exists and create header if not
-    if not os.path.isfile(mapping_file_path):
-        with open(mapping_file_path, mode='w', newline='') as file:
-            writer = csv.writer(file)
-            writer.writerow(['URL', 'Remote_Filename', 'Local_Filename', 'Hash'])
+jobs:
+  sync-rules:
+    runs-on: ubuntu-latest
 
-    # Read existing mappings from CSV
-    existing_mappings = {}
-    if os.path.isfile(mapping_file_path):
-        with open(mapping_file_path, mode='r', newline='') as file:
-            reader = csv.DictReader(file)
-            for row in reader:
-                existing_mappings[row['URL']] = row
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
 
-    # Read URLs from rules-list.txt
-    new_mappings = {}
-    with open(rules_list_path, mode='r') as file:
-        for line in file:
-            url = line.strip()
-            if url.startswith(('http://', 'https://')):
-                response = requests.head(url, allow_redirects=True)
-                remote_filename = os.path.basename(urlparse(response.url).path)
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.x'
 
-                # Calculate remote hash
-                response = requests.get(url, stream=True)
-                remote_hash = hashlib.md5(response.content).hexdigest()
+    - name: Install Python dependencies
+      run: pip install requests
 
-                # Initialize Local_Filename to Remote_Filename
-                local_filename = remote_filename
+    - name: Create output directory if not exists
+      run: mkdir -p ${{ env.OUTPUT_DIR }}
 
-                # Add to new_mappings if not in existing or different hash
-                existing_hash = existing_mappings.get(url, {}).get('Hash')
-                if url not in existing_mappings or existing_hash != remote_hash:
-                    new_mappings[url] = {
-                        'Remote_Filename': remote_filename,
-                        'Local_Filename': local_filename,  # Ensure Local_Filename is initialized
-                        'Hash': remote_hash
-                    }
+    - name: Process rules-list.txt and update mapping.csv with Python
+      id: process_rules
+      run: |
+        python3 << 'EOF'
+        import csv
+        import os
+        import requests
+        import hashlib
+        from urllib.parse import urlparse
+        from datetime import datetime
 
-    # Handle file name conflicts
-    filename_count = {}
-    conflict_filenames = {}
+        rules_list_path = "${{ env.RULES_LIST }}"
+        mapping_file_path = "${{ env.MAPPING_FILE }}"
+        temp_mapping_file_path = "${{ env.TEMP_MAPPING_FILE }}"
+        del_list_file_path = "${{ env.DEL_LIST_FILE }}"
+        output_dir = "${{ env.OUTPUT_DIR }}"
 
-    for url, info in new_mappings.items():
-        remote_filename = info['Remote_Filename']
-        local_filename = info['Local_Filename']
+        def calculate_hash(file_path):
+            hash_md5 = hashlib.md5()
+            with open(file_path, "rb") as f:
+                for chunk in iter(lambda: f.read(4096), b""):
+                    hash_md5.update(chunk)
+            return hash_md5.hexdigest()
 
-        # Count occurrences of each remote filename
-        if remote_filename in filename_count:
-            filename_count[remote_filename] += 1
-        else:
-            filename_count[remote_filename] = 1
+        # Check if mapping file exists and create header if not
+        if not os.path.isfile(mapping_file_path):
+            with open(mapping_file_path, mode='w', newline='') as file:
+                writer = csv.writer(file)
+                writer.writerow(['URL', 'Remote_Filename', 'Local_Filename', 'Hash'])
 
-        # Track filenames with conflicts
-        if filename_count[remote_filename] > 1:
-            if remote_filename not in conflict_filenames:
-                conflict_filenames[remote_filename] = []
-            conflict_filenames[remote_filename].append((url, remote_filename))
+        # Read existing mappings from CSV
+        existing_mappings = {}
+        if os.path.isfile(mapping_file_path):
+            with open(mapping_file_path, mode='r', newline='') as file:
+                reader = csv.DictReader(file)
+                for row in reader:
+                    existing_mappings[row['URL']] = row
 
-    # Adjust local filenames if conflicts exist
-    for remote_filename, entries in conflict_filenames.items():
-        for idx, (url, _) in enumerate(entries):
-            parsed_url = urlparse(url)
-            last_segment = parsed_url.path.split('/')[-2]
-            local_filename = f"{last_segment}-{remote_filename}"  # Generate unique local filename
-            new_mappings[url]['Local_Filename'] = local_filename
+        # Read URLs from rules-list.txt
+        new_mappings = {}
+        with open(rules_list_path, mode='r') as file:
+            for line in file:
+                url = line.strip()
+                if url.startswith(('http://', 'https://')):
+                    response = requests.head(url, allow_redirects=True)
+                    remote_filename = os.path.basename(urlparse(response.url).path)
 
-    # Create header if temp_mapping_file does not exist
-    if not os.path.isfile(temp_mapping_file_path):
-        with open(temp_mapping_file_path, mode='w', newline='') as file:
-            writer = csv.writer(file)
-            writer.writerow(['URL', 'Remote_Filename', 'Local_Filename', 'Hash'])
+                    # Calculate remote hash
+                    response = requests.get(url, stream=True)
+                    remote_hash = hashlib.md5(response.content).hexdigest()
 
-    # Compare and update temp_mapping.csv
-    with open(temp_mapping_file_path, mode='a', newline='') as temp_file:
-        writer = csv.writer(temp_file)
+                    # Initialize Local_Filename to Remote_Filename
+                    local_filename = remote_filename
+
+                    # Add to new_mappings if not in existing or different hash
+                    existing_hash = existing_mappings.get(url, {}).get('Hash')
+                    if url not in existing_mappings or existing_hash != remote_hash:
+                        new_mappings[url] = {
+                            'Remote_Filename': remote_filename,
+                            'Local_Filename': local_filename,  # Ensure Local_Filename is initialized
+                            'Hash': remote_hash
+                        }
+
+        # Handle file name conflicts
+        filename_count = {}
+        conflict_filenames = {}
+
         for url, info in new_mappings.items():
             remote_filename = info['Remote_Filename']
             local_filename = info['Local_Filename']
-            hash_value = info['Hash']
 
-            # Write to temp_mapping.csv
-            writer.writerow([url, remote_filename, local_filename, hash_value])
+            # Count occurrences of each remote filename
+            if remote_filename in filename_count:
+                filename_count[remote_filename] += 1
+            else:
+                filename_count[remote_filename] = 1
 
-    # Identify files to delete
-    del_list = []
-    for url in existing_mappings:
-        if url not in new_mappings:
-            del_list.append(existing_mappings[url]['Local_Filename'])
+            # Track filenames with conflicts
+            if filename_count[remote_filename] > 1:
+                if remote_filename not in conflict_filenames:
+                    conflict_filenames[remote_filename] = []
+                conflict_filenames[remote_filename].append((url, remote_filename))
 
-    # Write del_list to file
-    with open(del_list_file_path, mode='w') as del_file:
-        for filename in del_list:
-            del_file.write(f"{filename}\n")
-    EOF
+        # Adjust local filenames if conflicts exist
+        for remote_filename, entries in conflict_filenames.items():
+            for idx, (url, _) in enumerate(entries):
+                parsed_url = urlparse(url)
+                last_segment = parsed_url.path.split('/')[-2]
+                local_filename = f"{last_segment}-{remote_filename}"  # Generate unique local filename
+                new_mappings[url]['Local_Filename'] = local_filename
+
+        # Create header if temp_mapping_file does not exist
+        if not os.path.isfile(temp_mapping_file_path):
+            with open(temp_mapping_file_path, mode='w', newline='') as file:
+                writer = csv.writer(file)
+                writer.writerow(['URL', 'Remote_Filename', 'Local_Filename', 'Hash'])
+
+        # Compare and update temp_mapping.csv
+        with open(temp_mapping_file_path, mode='a', newline='') as temp_file:
+            writer = csv.writer(temp_file)
+            for url, info in new_mappings.items():
+                remote_filename = info['Remote_Filename']
+                local_filename = info['Local_Filename']
+                hash_value = info['Hash']
+
+                # Write to temp_mapping.csv
+                writer.writerow([url, remote_filename, local_filename, hash_value])
+
+        # Identify files to delete
+        del_list = []
+        for url in existing_mappings:
+            if url not in new_mappings:
+                del_list.append(existing_mappings[url]['Local_Filename'])
+
+        # Write del_list to file
+        with open(del_list_file_path, mode='w') as del_file:
+            for filename in del_list:
+                del_file.write(f"{filename}\n")
+        EOF
+
+    - name: Download updated files based on temp_mapping.csv
+      run: |
+        if [ -f "${{ env.TEMP_MAPPING_FILE }}" ]; then
+          while IFS=',' read -r url remote_filename local_filename hash; do
+            local_file="${{ env.OUTPUT_DIR }}/${local_filename}"
+            if ! test -f "$local_file" || [ "$(md5sum $local_file | awk '{ print $1 }')" != "$hash" ]; then
+              wget --continue -O "$local_file" "$url" || echo "Failed to download $url. Skipping."
+            fi
+          done < <(tail -n +2 "${{ env.TEMP_MAPPING_FILE }}")
+        else
+          echo "No new or updated files to download."
+        fi
+
+    - name: Delete obsolete files based on del_list.txt
+      run: |
+        if [ -f "${{ env.DEL_LIST_FILE }}" ]; then
+          while IFS= read -r filename; do
+            rm -f "${{ env.OUTPUT_DIR }}/$filename" || echo "Failed to delete $filename. Skipping."
+          done < "${{ env.DEL_LIST_FILE }}"
+        else
+          echo "No obsolete files to delete."
+        fi
+
+    - name: Update mapping.csv
+      run: |
+        cp "${{ env.TEMP_MAPPING_FILE }}" "${{ env.MAPPING_FILE }}"
+        rm "${{ env.TEMP_MAPPING_FILE }}"
+        rm "${{ env.DEL_LIST_FILE }}"
+
+    - name: List files in rules directory
+      run: ls -la "${{ env.OUTPUT_DIR }}"
+
+    - name: Add changes to staging
+      run: |
+        git config --global user.name "GitHub Actions"
+        git config --global user.email "actions@github.com"
+        git add "${{ env.OUTPUT_DIR }}"
+        git add "${{ env.MAPPING_FILE }}"
+
+    - name: Commit changes
+      run: |
+        git diff-index --quiet HEAD || git commit -m "Update rules files from rules-list.txt"
+
+    - name: Push changes
+      uses: ad-m/github-push-action@master
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}

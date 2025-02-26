@@ -45,26 +45,27 @@ jobs:
         from urllib.parse import urlparse
         from datetime import datetime
 
-        rules_list_path = "${{ env.RULES_LIST }}"
-        mapping_file_path = "${{ env.MAPPING_FILE }}"
-        temp_mapping_file_path = "${{ env.TEMP_MAPPING_FILE }}"
-        del_list_file_path = "${{ env.DEL_LIST_FILE }}"
-        output_dir = "${{ env.OUTPUT_DIR }}"
+        rules_list_path = "${{ env.RULES_LIST }}" # 规则列表文件路径
+        mapping_file_path = "${{ env.MAPPING_FILE }}" # 映射文件路径
+        temp_mapping_file_path = "${{ env.TEMP_MAPPING_FILE }}" # 临时映射文件路径
+        del_list_file_path = "${{ env.DEL_LIST_FILE }}" # 删除列表文件路径
+        output_dir = "${{ env.OUTPUT_DIR }}" # 输出目录
 
         def calculate_hash(file_path):
+            # 计算文件 MD5 哈希值
             hash_md5 = hashlib.md5()
             with open(file_path, "rb") as f:
                 for chunk in iter(lambda: f.read(4096), b""):
                     hash_md5.update(chunk)
             return hash_md5.hexdigest()
 
-        # Check if mapping file exists and create header if not
+        # 检查映射文件是否存在，不存在则创建并写入 CSV header
         if not os.path.isfile(mapping_file_path):
             with open(mapping_file_path, mode='w', newline='') as file:
                 writer = csv.writer(file)
                 writer.writerow(['URL', 'Remote_Filename', 'Local_Filename', 'Hash'])
 
-        # Read existing mappings from CSV
+        # 读取现有的映射关系
         existing_mappings = {}
         if os.path.isfile(mapping_file_path):
             with open(mapping_file_path, mode='r', newline='') as file:
@@ -72,83 +73,78 @@ jobs:
                 for row in reader:
                     existing_mappings[row['URL']] = row
 
-        # Read URLs from rules-list.txt
+        # 读取 rules-list.txt 中的 URL 列表
         new_mappings = {}
         with open(rules_list_path, mode='r') as file:
             for line in file:
                 url = line.strip()
                 if url.startswith(('http://', 'https://')):
-                    response = requests.head(url, allow_redirects=True)
-                    remote_filename = os.path.basename(urlparse(response.url).path)
+                    response = requests.head(url, allow_redirects=True) # 获取重定向后的 URL
+                    remote_filename = os.path.basename(urlparse(response.url).path) # 从 URL 中提取文件名
 
-                    # Calculate remote hash
+                    # 计算远程文件哈希值
                     response = requests.get(url, stream=True)
                     remote_hash = hashlib.md5(response.content).hexdigest()
 
-                    # Initialize Local_Filename to Remote_Filename
-                    local_filename = remote_filename
+                    local_filename = remote_filename # 默认本地文件名与远程文件名相同
 
-                    # Add to new_mappings if not in existing or different hash
+                    # 如果 URL 不存在于现有映射或哈希值不同，则添加到新映射
                     existing_hash = existing_mappings.get(url, {}).get('Hash')
                     if url not in existing_mappings or existing_hash != remote_hash:
                         new_mappings[url] = {
                             'Remote_Filename': remote_filename,
-                            'Local_Filename': local_filename,  # Ensure Local_Filename is initialized
+                            'Local_Filename': local_filename,
                             'Hash': remote_hash
                         }
 
-        # Handle file name conflicts
-        filename_count = {}
-        conflict_filenames = {}
+        # 处理文件名冲突
+        filename_count = {} # 统计远程文件名出现次数
+        conflict_filenames = {} # 存储冲突文件名及其对应的 URLs
 
         for url, info in new_mappings.items():
             remote_filename = info['Remote_Filename']
             local_filename = info['Local_Filename']
 
-            # Count occurrences of each remote filename
             if remote_filename in filename_count:
                 filename_count[remote_filename] += 1
             else:
                 filename_count[remote_filename] = 1
 
-            # Track filenames with conflicts
-            if filename_count[remote_filename] > 1:
+            if filename_count[remote_filename] > 1: # 发现文件名冲突
                 if remote_filename not in conflict_filenames:
                     conflict_filenames[remote_filename] = []
                 conflict_filenames[remote_filename].append((url, remote_filename))
 
-        # Adjust local filenames if conflicts exist
+        # 调整本地文件名以解决冲突
         for remote_filename, entries in conflict_filenames.items():
-            for idx, (url, _) in enumerate(entries):
+            for url, _ in entries: # 遍历冲突文件名对应的所有 URL 条目
                 parsed_url = urlparse(url)
-                last_segment = parsed_url.path.split('/')[-2]
-                local_filename = f"{last_segment}-{remote_filename}"  # Generate unique local filename
-                new_mappings[url]['Local_Filename'] = local_filename
+                last_segment = parsed_url.path.split('/')[-2] # 获取 URL 倒数第二段作为本地文件名前缀
+                local_filename = f"{last_segment}-{remote_filename}" # 生成新的本地文件名
+                new_mappings[url]['Local_Filename'] = local_filename # 更新本地文件名
 
-        # Create header if temp_mapping_file does not exist
+        # 如果临时映射文件不存在，则创建并写入 CSV header
         if not os.path.isfile(temp_mapping_file_path):
             with open(temp_mapping_file_path, mode='w', newline='') as file:
                 writer = csv.writer(file)
                 writer.writerow(['URL', 'Remote_Filename', 'Local_Filename', 'Hash'])
 
-        # Compare and update temp_mapping.csv
+        # 更新临时映射文件 temp_mapping.csv
         with open(temp_mapping_file_path, mode='a', newline='') as temp_file:
             writer = csv.writer(temp_file)
             for url, info in new_mappings.items():
                 remote_filename = info['Remote_Filename']
                 local_filename = info['Local_Filename']
                 hash_value = info['Hash']
+                writer.writerow([url, remote_filename, local_filename, hash_value]) # 写入 URL, 远程文件名, 本地文件名和哈希值到 CSV
 
-                # Write to temp_mapping.csv
-                writer.writerow([url, remote_filename, local_filename, hash_value])
-
-        # Identify files to delete
+        # 找出需要删除的文件
         del_list = []
         for url in existing_mappings:
             if url not in new_mappings:
-                del_list.append(existing_mappings[url]['Local_Filename'])
+                del_list.append(existing_mappings[url]['Local_Filename']) # 将需要删除的本地文件名添加到 del_list
 
-        # Write del_list to file
+        # 将删除列表写入 del_list.txt
         with open(del_list_file_path, mode='w') as del_file:
             for filename in del_list:
                 del_file.write(f"{filename}\n")

@@ -204,27 +204,3 @@ jobs:
           git add "${{ env.MAPPING_FILE }}"
           git diff-index --quiet HEAD || git commit -m "Update rules files from rules-list.txt"
           git push || echo "No changes to push." #  添加 push || echo 防止没有 commit 时 push 失败
-
-
-**主要重构和改进说明:**
-
-1.  **更清晰的 Step  划分和命名:**  将 Workflow  步骤划分得更细致，  每个 Step  专注于一个明确的任务，  并使用更具描述性的 Step  名称 (例如  "Checkout Repository",  "Process Rules List and Update Mapping",  "Download Updated Files"  等)，  提高了 Workflow  的 *可读性和可维护性*。
-
-2.  **显式  `working-directory`  配置:**  在 *所有需要访问仓库文件的 Step*  中，  都 *显式地配置了  `working-directory: ${{ github.workspace }}`*，  确保所有相关操作都在 *Workflow  工作区根目录*  下执行，  避免路径问题。
-
-3.  **Python  脚本内联，  但更注重代码组织:**  Python  脚本仍然采用内联  `python3 << 'EOF'`  的方式，  但脚本内部的代码 *增加了注释*，  将逻辑划分为更清晰的 *代码块*  (例如  "Mapping File Initialization",  "Process Rules List and Detect Changes",  "Handle Filename Conflicts"  等)，  提高了 Python  代码的 *可读性*。
-
-4.  **更完善的错误处理 (Python 部分):**  在 Python  脚本的  "Process Rules List and Detect Changes"  代码块中，  为  `requests.head()`  和  `requests.get()`  请求 *添加了  `timeout=10`  参数*，  设置了 *请求超时时间*，  防止因网络问题导致 Workflow  长时间卡顿。  同时，  使用了  `try...except requests.exceptions.RequestException as e:`  块来 *捕获  `requests`  请求可能发生的异常* (例如网络错误，  HTTP 错误等)，  并在发生异常时 *打印错误信息*  (使用  `print(f"Error processing URL: {url} - {e}")`)，  但 *Workflow  会 *继续执行*，  不会因单个 URL  处理失败而中断*，  提高了 Workflow  的 *健壮性*。  使用了  `response.raise_for_status()`  来 *显式检查 HTTP  响应状态码*，  并在发生 HTTP 错误时抛出异常，  以便  `except`  块捕获并处理。
-
-5.  **Download  和  Delete  Step  增加日志输出:**  在  "Download Updated Files"  和  "Delete Obsolete Files"  Step  的  `run`  脚本中，  为  `wget`  下载和  `rm`  删除命令 *增加了  `echo`  日志输出* (例如  `echo "Downloading: $url to $local_file"`，  `echo "Deleting obsolete file: ${{ env.OUTPUT_DIR }}/$filename"`），  使 Workflow  运行时，  日志信息更丰富，  可以 *更清晰地了解文件下载和删除的执行情况*。
-
-6.  **Commit  和  Push  Step  优化:**  在  "Commit and Push Changes"  Step  中，  在  `git push`  命令后 *添加了  `|| echo "No changes to push."`*，  防止当没有 Commit  时，  `git push`  命令因 *没有本地 Commit  而失败*，  导致 Workflow  出错。  现在即使没有 Commit，  `git push`  命令也会 *输出 "No changes to push."  信息，  但 *不会导致 Step  失败*，  Workflow  可以 *顺利完成*。
-
-7.  **移除  "Update Mapping CSV and Cleanup"  Step  中的  `cp`  命令:**  在  "Update Mapping CSV and Cleanup"  Step  中，  *移除了之前尝试使用的  `cp "${{ env.TEMP_MAPPING_FILE }}" "${{ env.MAPPING_FILE }}"`  命令*。  因为 Python  脚本中已经使用了  `os.replace(temp_mapping_file_path, mapping_file_path)`  来 *原子性地替换  mapping.csv  文件*，  已经完成了  `mapping.csv`  的更新，  因此  "Update Mapping CSV and Cleanup"  Step  现在 *只需要负责 *清理临时文件  (删除  `temp_mapping.csv`  和  `del_list.txt`)*  即可，  逻辑更清晰，  也避免了可能的重复操作。
-
-
-**请您将您  `.github/workflows/sync-rules.yml`  文件内容 *替换为 *上面 *我提供的 *重构后的 YAML 代码*，  *仔细检查，  确保复制完整，  并且 YAML  文件的缩进和格式都是正确的*。  然后，  *重新上传您的  `.github/workflows/sync-rules.yml`  文件，  并 *再次手动运行您的 Workflow***。**
-
-这次重构旨在 *提高 Workflow  的整体质量*，  使其 *更易于理解、更健壮、更易于维护*。  虽然不能 *完全保证*  一定不会再遇到任何问题 (因为环境的复杂性)，  但我相信 *重构后的 Workflow  将 *更可靠*，  之前遇到的 YAML  语法错误问题应该 *不会再出现*，  `temp_mapping.csv`  文件找不到的问题，  在  `working-directory`  配置正确的情况下，  也 *应该能得到解决*。
-
-请您 *尽快尝试*  并告知我 *这次运行的结果*。  我将 *持续关注*  并提供支持！  感谢您的信任和配合！

@@ -100,7 +100,7 @@ jobs:
                 if filename_count[remote_filename] > 1:
                     if remote_filename not in conflict_filenames:
                         conflict_filenames[remote_filename] = []
-                    conflict_filenames[remote_filename].append(url)
+                    conflict_filenames[remote_filename].append((url, remote_filename))
 
                 # Calculate hash for existing file if it exists
                 local_file_path = os.path.join(output_dir, local_filename)
@@ -119,10 +119,8 @@ jobs:
                     writer.writerow(existing_mappings[url].values())
 
             # Handle conflicts by renaming files
-            for remote_filename, urls in conflict_filenames.items():
-                for idx, url in enumerate(urls):
-                    response = requests.head(url, allow_redirects=True)
-                    remote_filename = os.path.basename(urlparse(response.url).path)
+            for remote_filename, entries in conflict_filenames.items():
+                for idx, (url, remote_filename) in enumerate(entries):
                     parsed_url = urlparse(url)
                     last_segment = parsed_url.path.split('/')[-2]
                     local_filename = f"{last_segment}-{remote_filename}-{idx+1}" if idx > 0 else remote_filename
@@ -151,3 +149,51 @@ jobs:
                 for filename in del_list:
                     del_file.write(f"{filename}\n")
         EOF
+
+    - name: Download updated files based on temp_mapping.csv
+      run: |
+        if [ -f "${{ env.TEMP_MAPPING_FILE }}" ]; then
+          while IFS=',' read -r url remote_filename local_filename hash; do
+            local_file="${{ env.OUTPUT_DIR }}/${local_filename}"
+            if ! test -f "$local_file" || [ "$(md5sum $local_file | awk '{ print $1 }')" != "$hash" ]; then
+              wget --continue -O "$local_file" "$url" || echo "Failed to download $url. Skipping."
+            fi
+          done < <(tail -n +2 "${{ env.TEMP_MAPPING_FILE }}")
+        else
+          echo "No new or updated files to download."
+        fi
+
+    - name: Delete obsolete files based on del_list.txt
+      run: |
+        if [ -f "${{ env.DEL_LIST_FILE }}" ]; then
+          while IFS= read -r filename; do
+            rm -f "${{ env.OUTPUT_DIR }}/$filename" || echo "Failed to delete $filename. Skipping."
+          done < "${{ env.DEL_LIST_FILE }}"
+        else
+          echo "No obsolete files to delete."
+        fi
+
+    - name: Update mapping.csv
+      run: |
+        cp "${{ env.TEMP_MAPPING_FILE }}" "${{ env.MAPPING_FILE }}"
+        rm "${{ env.TEMP_MAPPING_FILE }}"
+        rm "${{ env.DEL_LIST_FILE }}"
+
+    - name: List files in rules directory
+      run: ls -la "${{ env.OUTPUT_DIR }}"
+
+    - name: Add changes to staging
+      run: |
+        git config --global user.name "GitHub Actions"
+        git config --global user.email "actions@github.com"
+        git add "${{ env.OUTPUT_DIR }}"
+        git add "${{ env.MAPPING_FILE }}"
+
+    - name: Commit changes
+      run: |
+        git diff-index --quiet HEAD || git commit -m "Update rules files from rules-list.txt"
+
+    - name: Push changes
+      uses: ad-m/github-push-action@master
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}

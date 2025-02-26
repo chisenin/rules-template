@@ -1,39 +1,3 @@
-name: Sync Rules Files
-
-on:
-  push:
-    paths:
-      - rules-list.txt
-  schedule:
-    - cron: '0 4 * * *'
-  workflow_dispatch:
-
-env:
-  RULES_LIST: rules-list.txt
-  MAPPING_FILE: mapping.csv
-  TEMP_MAPPING_FILE: temp_mapping.csv
-  DEL_LIST_FILE: del_list.txt
-  OUTPUT_DIR: rules
-
-jobs:
-  sync-rules:
-    runs-on: ubuntu-latest
-
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.x'
-
-    - name: Install Python dependencies
-      run: pip install requests
-
-    - name: Create output directory if not exists
-      run: mkdir -p ${{ env.OUTPUT_DIR }}
-
     - name: Process rules-list.txt and update mapping.csv with Python
       id: process_rules
       run: |
@@ -83,10 +47,11 @@ jobs:
         with open(temp_mapping_file_path, mode='a', newline='') as temp_file:
             writer = csv.writer(temp_file)
             filename_count = {}
+            conflict_filenames = {}
 
             for url in new_urls:
                 response = requests.head(url, allow_redirects=True)
-                remote_filename = os.path.basename(url)
+                remote_filename = os.path.basename(urlparse(response.url).path)
                 local_filename = remote_filename
 
                 # Count occurrences of each remote_filename
@@ -95,11 +60,11 @@ jobs:
                 else:
                     filename_count[remote_filename] = 1
 
-                # Adjust local_filename if conflict exists
+                # Track filenames with conflicts
                 if filename_count[remote_filename] > 1:
-                    parsed_url = urlparse(url)
-                    last_segment = parsed_url.path.split('/')[-2]
-                    local_filename = f"{last_segment}-{remote_filename}"
+                    if remote_filename not in conflict_filenames:
+                        conflict_filenames[remote_filename] = []
+                    conflict_filenames[remote_filename].append(url)
 
                 # Calculate hash for existing file if it exists
                 local_file_path = os.path.join(output_dir, local_filename)
@@ -117,6 +82,28 @@ jobs:
                 else:
                     writer.writerow(existing_mappings[url].values())
 
+            # Handle conflicts by renaming files
+            for remote_filename, urls in conflict_filenames.items():
+                for idx, url in enumerate(urls):
+                    response = requests.head(url, allow_redirects=True)
+                    remote_filename = os.path.basename(urlparse(response.url).path)
+                    parsed_url = urlparse(url)
+                    last_segment = parsed_url.path.split('/')[-2]
+                    local_filename = f"{last_segment}-{remote_filename}-{idx+1}" if idx > 0 else remote_filename
+
+                    # Calculate hash for existing file if it exists
+                    local_file_path = os.path.join(output_dir, local_filename)
+                    existing_hash = None
+                    if os.path.isfile(local_file_path):
+                        existing_hash = calculate_hash(local_file_path)
+
+                    # Fetch remote hash
+                    response = requests.get(url, stream=True)
+                    remote_hash = hashlib.md5(response.content).hexdigest()
+
+                    # Update temp_mapping.csv with the new local_filename
+                    writer.writerow([url, remote_filename, local_filename, remote_hash])
+
             # Identify files to delete
             del_list = []
             for url in existing_mappings:
@@ -128,51 +115,3 @@ jobs:
                 for filename in del_list:
                     del_file.write(f"{filename}\n")
         EOF
-
-    - name: Download updated files based on temp_mapping.csv
-      run: |
-        if [ -f "${{ env.TEMP_MAPPING_FILE }}" ]; then
-          while IFS=',' read -r url remote_filename local_filename hash; do
-            local_file="${{ env.OUTPUT_DIR }}/${local_filename}"
-            if ! test -f "$local_file" || [ "$(md5sum $local_file | awk '{ print $1 }')" != "$hash" ]; then
-              wget --continue -O "$local_file" "$url" || echo "Failed to download $url. Skipping."
-            fi
-          done < <(tail -n +2 "${{ env.TEMP_MAPPING_FILE }}")
-        else
-          echo "No new or updated files to download."
-        fi
-
-    - name: Delete obsolete files based on del_list.txt
-      run: |
-        if [ -f "${{ env.DEL_LIST_FILE }}" ]; then
-          while IFS= read -r filename; do
-            rm -f "${{ env.OUTPUT_DIR }}/$filename" || echo "Failed to delete $filename. Skipping."
-          done < "${{ env.DEL_LIST_FILE }}"
-        else
-          echo "No obsolete files to delete."
-        fi
-
-    - name: Update mapping.csv
-      run: |
-        cp "${{ env.TEMP_MAPPING_FILE }}" "${{ env.MAPPING_FILE }}"
-        rm "${{ env.TEMP_MAPPING_FILE }}"
-        rm "${{ env.DEL_LIST_FILE }}"
-
-    - name: List files in rules directory
-      run: ls -la "${{ env.OUTPUT_DIR }}"
-
-    - name: Add changes to staging
-      run: |
-        git config --global user.name "GitHub Actions"
-        git config --global user.email "actions@github.com"
-        git add "${{ env.OUTPUT_DIR }}"
-        git add "${{ env.MAPPING_FILE }}"
-
-    - name: Commit changes
-      run: |
-        git diff-index --quiet HEAD || git commit -m "Update rules files from rules-list.txt"
-
-    - name: Push changes
-      uses: ad-m/github-push-action@master
-      with:
-        github_token: ${{ secrets.GITHUB_TOKEN }}

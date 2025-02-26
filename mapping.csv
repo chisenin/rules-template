@@ -1,0 +1,9 @@
+URL,Remote_Filename,Local_Filename,Hash
+https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geoip/private.srs,private.srs,private.srs,e9e351f7978148df75f11de6c7b744a4
+https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geosite/private.srs,private.srs,private.srs,01da2b5520e5a1fb547e2c7b08198058
+https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geoip/telegram.srs,telegram.srs,telegram.srs,2f1482e9c343b2caae6f050a36a7b984
+https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geosite/telegram.srs,telegram.srs,telegram.srs,8fb49f29f73e4626ded4c60d1e0f6f36
+https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geoip/netflix.srs,netflix.srs,netflix.srs,b1dcbd9677b66898d722b2fd6ee5e0d6
+https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geosite/netflix.srs,netflix.srs,netflix.srs,ef4885b005077c0993935d1c0bdfda83
+https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo-lite/geoip/apple.srs,apple.srs,apple.srs,3f8cebbb0d4379ad9b5e0a621dba936a
+https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geosite/apple.srs,apple.srs,apple.srs,2fddb52876bab8c54c9786cb22b4dbc6

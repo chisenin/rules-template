@@ -18,5 +18,5 @@ jobs:
         env:
           SSH_PRIVATE_KEY: ${{ secrets.GITEE_TOKEN }}
         with:
-          source-repo: "git@github.com:https://github.com/chisenin/rules-template.git"  # 修改为你的GitHub仓库地址
-          destination-repo: "git@gitee.com:https://gitee.com/chisenin/rules-template.git"  # 修改为你的Gitee仓库地址
+          source-repo: "git@github.com:https://github.com/chisenin/rules-template"  # 修改为你的GitHub仓库地址
+          destination-repo: "git@gitee.com:https://gitee.com/chisenin/rules-template"  # 修改为你的Gitee仓库地址

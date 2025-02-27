@@ -1,50 +1,146 @@
-name: Download and Update Rules
+name: Sync Rules Files
 
 on:
   push:
-    branches:
-      - main
     paths:
       - 'rules-list.txt'
-  workflow_dispatch:
   schedule:
     - cron: '0 4 * * *'
+  workflow_dispatch:
 
 jobs:
-  update-rules:
+  sync-rules:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+    - name: Checkout repository
+      uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.x'
 
-      - name: Install dependencies
-        run: |
-          python3 -m pip install --upgrade pip
-          pip install wget
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pandas requests hashlib
 
-      - name: Create rules directory
-        run: mkdir -p rules
+    - name: Create output directory
+      run: mkdir -p rules
 
-      - name: Initialize and process rules using Python
-        run: python3 scripts/process_rules.py
-        env:
-          RULES_LIST_PATH: rules-list.txt
-          MAPPING_FILE_PATH: mapping.csv
-          TEMP_MAPPING_FILE_PATH: temp_mapping.csv
-          DEL_LIST_FILE_PATH: del_list.txt
-          RULES_DIR_PATH: rules
+    - name: Initialize temp_mapping.csv
+      run: echo "URL,RemoteFileName,LocalFileName,Hash" > temp_mapping.csv
 
-      - name: List files in rules directory
-        run: ls -l rules
+    - name: Populate temp_mapping.csv from existing mapping.csv
+      if: ${{ github.event_name != 'workflow_dispatch' && github.event_name != 'schedule' }}
+      run: |
+        if [ -s mapping.csv ]; then
+          cat mapping.csv >> temp_mapping.csv
+        fi
 
-      - name: Commit and push changes
-        uses: EndBug/add-and-commit@v9
-        with:
-          add: 'rules mapping.csv'
-          message: 'Update rules and mapping'
+    - name: Process rules-list.txt
+      run: |
+        import pandas as pd
+        import requests
+        import hashlib
+        import os
+
+        # Read URLs from rules-list.txt
+        urls = []
+        with open('rules-list.txt', 'r') as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#'):
+                    urls.append(line)
+
+        if not urls:
+            exit(0)
+
+        df = pd.read_csv('temp_mapping.csv')
+
+        # Remove entries not in rules-list.txt
+        df = df[df['URL'].isin(urls)]
+        df.to_csv('temp_mapping.csv', index=False)
+
+        # Add new entries to temp_mapping.csv
+        existing_urls = set(df['URL'])
+        for url in urls:
+            if url not in existing_urls:
+                df = df.append({'URL': url, 'RemoteFileName': '', 'LocalFileName': '', 'Hash': ''}, ignore_index=True)
+        df.to_csv('temp_mapping.csv', index=False)
+
+        # Fetch remote file names and calculate hashes
+        for index, row in df.iterrows():
+            response = requests.get(row['URL'])
+            remote_filename = row['URL'].split('/')[-1]
+            hash_md5 = hashlib.md5(response.content).hexdigest()
+
+            df.at[index, 'RemoteFileName'] = remote_filename
+            df.at[index, 'Hash'] = hash_md5
+
+        df.to_csv('temp_mapping.csv', index=False)
+
+        # Generate unique local filenames
+        filename_counts = df['RemoteFileName'].value_counts()
+        duplicates = filename_counts[filename_counts > 1].index.tolist()
+
+        for index, row in df.iterrows():
+            remote_filename = row['RemoteFileName']
+            if remote_filename in duplicates:
+                parts = row['URL'].split('/')
+                unique_part = parts[-2] if len(parts) > 2 else ''
+                local_filename = f"{unique_part}-{remote_filename}"
+            else:
+                local_filename = remote_filename
+
+            df.at[index, 'LocalFileName'] = local_filename
+
+        df.to_csv('temp_mapping.csv', index=False)
+
+    - name: Download or update files
+      run: |
+        import pandas as pd
+        import requests
+        import os
+        import hashlib
+
+        df = pd.read_csv('temp_mapping.csv')
+        del_list = []
+
+        for index, row in df.iterrows():
+            local_path = os.path.join('rules', row['LocalFileName'])
+            response = requests.get(row['URL'])
+            new_hash = hashlib.md5(response.content).hexdigest()
+
+            if os.path.exists(local_path):
+                with open(local_path, 'rb') as f:
+                    existing_hash = hashlib.md5(f.read()).hexdigest()
+                if existing_hash == new_hash:
+                    continue
+
+            with open(local_path, 'wb') as f:
+                f.write(response.content)
+
+        df.to_csv('temp_mapping.csv', index=False)
+
+    - name: Clean up old files
+      if: exists('del_list.txt')
+      run: xargs rm < del_list.txt
+
+    - name: Update mapping.csv
+      run: |
+        cp temp_mapping.csv mapping.csv
+        rm temp_mapping.csv
+        rm del_list.txt
+
+    - name: List files in rules directory
+      run: ls -l rules/
+
+    - name: Commit changes
+      run: |
+        git config --global user.name 'GitHub Actions'
+        git config --global user.email 'actions@github.com'
+        git add .
+        git commit -m "Sync rules files"
+        git push

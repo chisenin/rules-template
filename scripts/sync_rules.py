@@ -25,9 +25,14 @@ def process_rules_list(temp_mapping_path, urls):
     df = df[df['URL'].isin(urls)]
 
     # Add new entries to temp_mapping.csv
+    new_entries = []
     for url in urls:
         if url not in existing_urls:
-            df = df.append({'URL': url, 'RemoteFileName': '', 'LocalFileName': '', 'Hash': ''}, ignore_index=True)
+            new_entries.append({'URL': url, 'RemoteFileName': '', 'LocalFileName': '', 'Hash': ''})
+
+    if new_entries:
+        new_df = pd.DataFrame(new_entries)
+        df = pd.concat([df, new_df], ignore_index=True)
 
     df.to_csv(temp_mapping_path, index=False)
 

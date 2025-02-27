@@ -69,12 +69,16 @@ jobs:
         run: |
           # 更新文件
           while IFS= read -r entry; do
+            if [[ -z "$entry" ]]; then
+              continue # 忽略空行
+            fi
+          
             url=$(echo "$entry" | cut -d',' -f1)
             remote_file_name=$(echo "$entry" | cut -d',' -f2)
             local_file_name=$(echo "$entry" | cut -d',' -f3)
             hash=$(echo "$entry" | cut -d',' -f4)
-
-            # 比较哈希值，决定是否需要下载
+          
+            # 检查本地文件是否存在
             if [[ -f "rules/$local_file_name" ]]; then
               current_hash=$(sha256sum "rules/$local_file_name" | awk '{print $1}')
               if [[ "$current_hash" == "$hash" ]]; then
@@ -82,9 +86,16 @@ jobs:
                 continue
               fi
             fi
-
+          
             # 下载文件
+            echo "Downloading $url to rules/$local_file_name..."
             curl -s -L "$url" -o "rules/$local_file_name"
+            if [[ $? -ne 0 ]]; then
+              echo "Failed to download $url. Skipping..."
+              continue
+            fi
+          
+            # 计算新哈希并更新 temp_mapping.csv
             new_hash=$(sha256sum "rules/$local_file_name" | awk '{print $1}')
             sed -i "s|$url,$remote_file_name,$local_file_name,$hash|$url,$remote_file_name,$local_file_name,$new_hash|" temp_mapping.csv
           done < temp_mapping.csv

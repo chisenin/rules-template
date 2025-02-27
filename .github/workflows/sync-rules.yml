@@ -1,137 +1,205 @@
-name: Sync Rules
+name: Download and Update Rules
 
 on:
-  # 触发条件：手动触发、定时触发、rules-list.txt 文件变化触发
-  workflow_dispatch: # 手动触发
-  schedule:
-    - cron: '0 4 * * *' # 每天凌晨 4 点定时触发
   push:
+    branches:
+      - main  # 假设主分支名为 main
     paths:
-      - 'rules-list.txt' # 仅当 rules-list.txt 文件变化时触发
+      - 'rules-list.txt'  # 当 rules-list.txt 文件变化时触发 [^1]
+  workflow_dispatch:  # 手动触发 [^1]
+  schedule:
+    - cron: '0 4 * * *'  # 每天凌晨4点触发 [^1]
 
 jobs:
-  process-rules:
+  update-rules:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4 # 检出代码仓库
+        uses: actions/checkout@v4  # 检出代码仓库, 使用 v4 版本 [^1]
 
       - name: Create rules directory
-        run: mkdir -p rules # 创建输出目录 rules（如果不存在）
+        run: mkdir -p rules  # 创建输出目录 rules（如果不存在）[^1]
 
-      - name: Check if mapping.csv exists
-        id: check-mapping
+      - name: Initialize temp_mapping.csv
         run: |
-          if test -f "mapping.csv"; then
-            echo "mapping_exists=true" >> $GITHUB_OUTPUT
-          else
-            echo "mapping_exists=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Handle file name conflicts
-        run: |
-          # 处理文件名冲突
-          # 创建 temp_mapping.csv
-          echo "url,remote_file_name,local_file_name,hash" > temp_mapping.csv
-
-          # 如果 mapping.csv 存在，将其内容写入 temp_mapping.csv
-          if [[ -f "mapping.csv" ]]; then
+          # 创建含有表头的空表 temp_mapping.csv
+          echo "URL,RemoteFileName,LocalFileName,Hash" > temp_mapping.csv
+          # 如果存在 mapping.csv 且内容不为空，则读取内容到 temp_mapping.csv
+          if [ -s "mapping.csv" ]; then
             cat mapping.csv >> temp_mapping.csv
           fi
 
-          # 读取 rules-list.txt，比对 temp_mapping.csv
-          while IFS= read -r url; do
-            if ! grep -q "$url" temp_mapping.csv; then
-              echo "$url,,," >> temp_mapping.csv # 如果 URL 不存在，则添加到 temp_mapping.csv
-            fi
-          done < rules-list.txt
-
-          # 如果 rules-list.txt 中没有的 URL，从 temp_mapping.csv 中删除
-          while IFS= read -r url; do
-            if ! grep -q "$url" rules-list.txt; then
-              local_file_name=$(grep "$url" temp_mapping.csv | cut -d',' -f3)
-              echo "$local_file_name" >> del_list.txt # 记录需要删除的文件名到 del_list.txt
-              sed -i "/$url/d" temp_mapping.csv # 从 temp_mapping.csv 中删除表项
-            fi
-          done < <(cut -d',' -f1 temp_mapping.csv | grep -v 'url')
-
-          # 填充远程文件名并处理冲突
-          sed -i '1d' temp_mapping.csv # 删除表头
-          while IFS= read -r entry; do
-            url=$(echo "$entry" | cut -d',' -f1)
-            remote_file_name=$(basename "$url")
-            echo "$url,$remote_file_name,,$(echo "$entry" | cut -d',' -f4)" >> temp_mapping.tmp
-          done < temp_mapping.csv
-
-          mv temp_mapping.tmp temp_mapping.csv
-
-      - name: Update files
+      - name: Prepare URL list and clean up
         run: |
-          # 更新文件
-          while IFS= read -r entry; do
-            if [[ -z "$entry" ]]; then
-              echo "Skipping empty line..."
-              continue # 忽略空行
-            fi
-          
-            url=$(echo "$entry" | cut -d',' -f1)
-            remote_file_name=$(echo "$entry" | cut -d',' -f2)
-            local_file_name=$(echo "$entry" | cut -d',' -f3)
-            hash=$(echo "$entry" | cut -d',' -f4)
-          
-            # 检查 URL 是否为空
-            if [[ -z "$url" ]]; then
-              echo "URL is empty for entry: $entry. Skipping..."
-              continue
-            fi
-          
-            # 检查本地文件是否存在
-            if [[ -f "rules/$local_file_name" ]]; then
-              current_hash=$(sha256sum "rules/$local_file_name" | awk '{print $1}')
-              if [[ "$current_hash" == "$hash" ]]; then
-                echo "File $local_file_name is up to date."
-                continue
-              fi
-            fi
-          
-            # 下载文件
-            echo "Downloading $url to rules/$local_file_name..."
-            curl -s -L -f "$url" -o "rules/$local_file_name"
-            if [[ $? -ne 0 ]]; then
-              echo "Failed to download $url. Skipping..."
-              continue
-            fi
-          
-            # 计算新哈希并更新 temp_mapping.csv
-            new_hash=$(sha256sum "rules/$local_file_name" | awk '{print $1}')
-            sed -i "s|$url,$remote_file_name,$local_file_name,$hash|$url,$remote_file_name,$local_file_name,$new_hash|" temp_mapping.csv
-          done < temp_mapping.csv
+            # 创建一个空文件，防止后续的测试失败
+            touch rules-list.txt
+            # 读取 rules-list.txt，如果内容不为空，则比对 temp_mapping.csv
+            if [ -s "rules-list.txt" ]; then
+              # 创建一个临时文件用于存储更新后的映射
+              > temp_mapping_new.csv
+              echo "URL,RemoteFileName,LocalFileName,Hash" >> temp_mapping_new.csv
 
-      - name: Clean old files
+              # 遍历 rules-list.txt 中的 URL
+              while IFS= read -r url; do
+                # 跳过注释行
+                if [[ "$url" == \#* ]]; then
+                    continue
+                fi
+                # 去除多余的空行
+                if [ -z "$url" ];then
+                    continue
+                fi
+                # 检查 URL 是否在 temp_mapping.csv 中
+                grep -q "$url" temp_mapping.csv
+                if [ $? -ne 0 ]; then
+                  # 如果不在，则添加到 temp_mapping_new.csv
+                  echo "$url,,," >> temp_mapping_new.csv
+                else
+                  # 如果存在，则直接复制该行
+                  grep "$url" temp_mapping.csv >> temp_mapping_new.csv
+                fi
+              done < rules-list.txt
+
+              # 找出需要删除的条目 (在 temp_mapping.csv 中但不在 rules-list.txt 中)
+              > del_list.txt
+              awk -F, 'NR>1 {print $1}' temp_mapping.csv | sort > urls_temp_mapping.txt
+              sort rules-list.txt | grep -v '^#' | grep -v '^$' > urls_rules_list.txt #排除注释和空行
+              comm -23 urls_temp_mapping.txt urls_rules_list.txt | while read -r url_to_remove; do
+                grep -v "$url_to_remove" temp_mapping.csv >> temp_mapping_new.csv  #将不需要删除的写入
+                # 将其本地文件名写入 del_list.txt
+                grep "$url_to_remove" temp_mapping.csv | awk -F, '{print $3}' >> del_list.txt
+              done
+
+              # 使用更新后的映射替换原有的 temp_mapping.csv
+              mv temp_mapping_new.csv temp_mapping.csv
+            else
+              # 如果 rules-list.txt 为空，则清空 temp_mapping.csv (保留表头)
+              echo "URL,RemoteFileName,LocalFileName,Hash" > temp_mapping.csv
+              # 所有的本地文件都需要被删除
+              awk -F, 'NR>1 {print $3}' mapping.csv >> del_list.txt
+            fi
+
+
+      - name: Check if temp_mapping.csv is empty
         run: |
-          # 清理旧文件
-          if [[ -f "del_list.txt" ]]; then
-            while IFS= read -r file; do
-              rm -f "rules/$file"
-            done < del_list.txt
+          # 读取 temp_mapping.csv ，如果没有列表项，则中止整个工作流
+          if ! [ $(wc -l < temp_mapping.csv) -gt 1 ]; then
+            echo "No URLs to process. Exiting workflow."
+            exit 1
           fi
 
-      - name: Update mapping file
+      - name: Process filenames and generate local names
         run: |
-          # 更新映射文件
-          if [[ -f "mapping.csv" ]]; then
-            cp temp_mapping.csv mapping.csv
-            rm -f temp_mapping.csv
-          else
-            mv temp_mapping.csv mapping.csv
-          fi
-          rm -f del_list.txt
+          # 读取 temp_mapping.csv, 从 URL 获取远程文件名
+          awk -F, 'NR>1 {
+            # 从 URL 的最后一段直接获取远程文件名
+            split($1, a, "/");
+            $2 = a[length(a)];
+            print $0;
+          }' temp_mapping.csv > temp_mapping_with_remote.csv
+          mv temp_mapping_with_remote.csv temp_mapping.csv
 
-      - name: Commit changes
+          # 统计每个远程文件名的出现次数
+          awk -F, 'NR>1 {print $2}' temp_mapping.csv | sort | uniq -c | sort -nr > remote_file_counts.txt
+
+          # 创建追踪数组,储存出现多次的文件名
+          awk '$1 > 1 {print $2}' remote_file_counts.txt > tracked_remote_files.txt
+
+          # 根据追踪数组中的远程文件名，遍历temp_mapping.csv，生成唯一的本地文件名
+          while IFS= read -r line; do
+            remote_filename=$(echo "$line" | awk -F, '{print $2}')
+            url=$(echo "$line" | awk -F, '{print $1}')
+
+            # 检查是否在追踪数组中
+            grep -q "$remote_filename" tracked_remote_files.txt
+            if [ $? -eq 0 ]; then
+              # 提取URL的倒数第二个路径段，生成本地文件名
+              url_path_second_last=$(echo "$url" | awk -F/ '{print $(NF-1)}')
+              local_filename="$url_path_second_last-$remote_filename"
+
+            else
+              # 未多次出现的远程文件名则直接取为本地文件名
+              local_filename="$remote_filename"
+            fi
+             #更新LocalFileName
+            echo "$line" | awk -v local_name="$local_filename" -F, '{$3 = local_name; print $0}' >> temp_new.csv
+
+          done < temp_mapping.csv
+          # 移除旧的，更新新的
+          rm temp_mapping.csv
+          mv temp_new.csv temp_mapping.csv
+
+      - name: Download and update files
         run: |
-          # 提交更改
-          git config --global user.name "GitHub Actions"
-          git config --global user.email "actions@github.com"
-          git add rules mapping.csv
-          git commit -m "Updated rules and mapping file"
-          git push
+          # 根据 temp_mapping.csv 中的信息下载/更新文件
+          while IFS=, read -r url remote_filename local_filename old_hash; do
+            file_path="rules/$local_filename"
+            # 根据文件扩展名决定如何下载和计算哈希
+            case "$remote_filename" in
+              *.srs)
+                # 下载文件并计算哈希,为了适配sing-box使用的srs文件，取得的数据使用head -c 1472
+                if wget -nv -O - "$url" | head -c 1472 > "$file_path"; then
+                  new_hash=$(sha256sum "$file_path" | awk '{print $1}')
+                else
+                  echo "Failed to download $url"
+                  continue  # 如果下载失败，跳过当前循环
+                fi
+                ;;
+              *.json|*.yaml|*.yml)
+                # 对于 JSON 和 YAML 文件，直接下载整个文件
+                if wget -nv -O "$file_path" "$url"; then
+                    new_hash=$(sha256sum "$file_path" | awk '{print $1}')
+                else
+                    echo "Failed to download $url"
+                    continue
+                fi
+                ;;
+              *)
+                echo "Unsupported file type: $remote_filename"
+                continue  # 如果是不支持的文件类型，跳过
+                ;;
+            esac
+
+            # 比较哈希值，如果相同则跳过
+            if [ "$old_hash" != "$new_hash" ]; then
+              echo "Updating $local_filename (Hash: $new_hash)"
+              # 更新temp_mapping,因为不能有空项，所以在这里更新
+              sed -i "s|$url,$remote_filename,$local_filename,$old_hash|$url,$remote_filename,$local_filename,$new_hash|g" temp_mapping.csv
+            else
+              echo "Skipping $local_filename (Hash matches)"
+            fi
+
+          done < <(tail -n +2 temp_mapping.csv)
+
+      - name: Clean up old files
+        run: |
+          # 根据 del_list.txt 删除不再需要的文件
+          while IFS= read -r file_to_delete; do
+            if [ -f "rules/$file_to_delete" ];then
+              rm "rules/$file_to_delete"
+              echo "Deleted $file_to_delete"
+            fi
+          done < del_list.txt
+
+      - name: Update mapping file and remove temporary files
+        run: |
+          # 将 temp_mapping.csv 复制到 mapping.csv
+          cp temp_mapping.csv mapping.csv
+          # 删除临时文件
+          rm temp_mapping.csv
+          rm del_list.txt
+          rm remote_file_counts.txt
+          rm tracked_remote_files.txt
+          rm urls_rules_list.txt
+          rm urls_temp_mapping.txt
+
+
+      - name: List files in rules directory
+        run: ls -l rules  # 列出 rules 文件夹中的文件
+
+      - name: Commit and push changes
+        uses: EndBug/add-and-commit@v9
+        with:
+          add: 'rules mapping.csv'
+          message: 'Update rules and mapping'  #提交信息

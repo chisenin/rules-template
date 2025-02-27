@@ -80,6 +80,11 @@ jobs:
               awk -F, 'NR>1 {print $3}' mapping.csv >> del_list.txt
             fi
 
+      - name: Debug: Print temp_mapping.csv
+        run: cat temp_mapping.csv
+
+      - name: Debug: Print del_list.txt
+        run: cat del_list.txt
 
       - name: Check if temp_mapping.csv is empty
         run: |
@@ -194,7 +199,6 @@ jobs:
           rm urls_rules_list.txt
           rm urls_temp_mapping.txt
 
-
       - name: List files in rules directory
         run: ls -l rules  # 列出 rules 文件夹中的文件
 
@@ -202,4 +206,4 @@ jobs:
         uses: EndBug/add-and-commit@v9
         with:
           add: 'rules mapping.csv'
-          message: 'Update rules and mapping'  #提交信息
+          message: 'Update rules and mapping'  # 提交信息

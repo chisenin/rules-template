@@ -1,206 +1,119 @@
-name: Sync Rules Files (Refactored)
+name: Sync Rules
 
 on:
+  # 触发条件：手动触发、定时触发、rules-list.txt 文件变化触发
+  workflow_dispatch: # 手动触发
+  schedule:
+    - cron: '0 4 * * *' # 每天凌晨 4 点定时触发
   push:
     paths:
-      - rules-list.txt
-  schedule:
-    - cron: '0 4 * * *'
-  workflow_dispatch:
-
-env:
-  RULES_LIST: rules-list.txt
-  MAPPING_FILE: mapping.csv
-  TEMP_MAPPING_FILE: temp_mapping.csv
-  DEL_LIST_FILE: del_list.txt
-  OUTPUT_DIR: rules
+      - 'rules-list.txt' # 仅当 rules-list.txt 文件变化时触发
 
 jobs:
-  sync-rules:
+  process-rules:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v3 # 检出代码仓库
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.x'
+      - name: Create rules directory
+        run: mkdir -p rules # 创建输出目录 rules（如果不存在）
 
-      - name: Install Python Dependencies
-        run: pip install requests
-        working-directory: ${{ github.workspace }}
-
-      - name: Create Output Directory
-        run: mkdir -p ${{ env.OUTPUT_DIR }}
-        working-directory: ${{ github.workspace }}
-
-      - name: Process Rules List and Update Mapping
-        id: process_rules
-        working-directory: ${{ github.workspace }}
+      - name: Check if mapping.csv exists
+        id: check-mapping
         run: |
-          python3 << 'EOF'
-          import csv
-          import os
-          import requests
-          import hashlib
-          from urllib.parse import urlparse
-          from datetime import datetime
+          if test -f "mapping.csv"; then
+            echo "mapping_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "mapping_exists=false" >> $GITHUB_OUTPUT
+          fi
 
-          rules_list_path = "${{ env.RULES_LIST }}"
-          mapping_file_path = "${{ env.MAPPING_FILE }}"
-          temp_mapping_file_path = "${{ env.TEMP_MAPPING_FILE }}"
-          del_list_file_path = "${{ env.DEL_LIST_FILE }}"
-          output_dir = "${{ env.OUTPUT_DIR }}"
-
-          def calculate_hash(file_path):
-              hash_md5 = hashlib.md5()
-              with open(file_path, "rb") as f:
-                  for chunk in iter(lambda: f.read(4096), b""):
-                      hash_md5.update(chunk)
-              return hash_md5.hexdigest()
-
-          # ---  Mapping File Initialization ---
-          if not os.path.isfile(mapping_file_path):
-              with open(mapping_file_path, mode='w', newline='') as file:
-                  writer = csv.writer(file)
-                  writer.writerow(['URL', 'Remote_Filename', 'Local_Filename', 'Hash'])
-          existing_mappings = {}
-          if os.path.isfile(mapping_file_path):
-              with open(mapping_file_path, mode='r', newline='') as file:
-                  reader = csv.DictReader(file)
-                  for row in reader:
-                      existing_mappings[row['URL']] = row
-
-          # ---  Process Rules List and Detect Changes ---
-          new_mappings = {}
-          with open(rules_list_path, mode='r') as file:
-              for line in file:
-                  url = line.strip()
-                  if url.startswith(('http://', 'https://')):
-                      try:
-                          response = requests.head(url, allow_redirects=True, timeout=10) # 添加超时
-                          response.raise_for_status() # 检查 HTTP 错误
-                          remote_filename = os.path.basename(urlparse(response.url).path)
-                          response = requests.get(url, stream=True, timeout=10) # 再次请求内容，并添加超时
-                          response.raise_for_status() # 检查 HTTP 错误
-                          remote_hash = hashlib.md5(response.content).hexdigest()
-                          local_filename = remote_filename
-
-                          existing_hash = existing_mappings.get(url, {}).get('Hash')
-                          if url not in existing_mappings or existing_hash != remote_hash:
-                              new_mappings[url] = {
-                                  'Remote_Filename': remote_filename,
-                                  'Local_Filename': local_filename,
-                                  'Hash': remote_hash
-                              }
-                      except requests.exceptions.RequestException as e:
-                          print(f"Error processing URL: {url} - {e}") # 打印错误信息，但 *不* 中断 Workflow
-                          continue #  *继续处理*  rules-list.txt 中的 *下一个 URL*
-
-          # ---  Handle Filename Conflicts ---
-          filename_count = {}
-          conflict_remote_filenames = set()
-          existing_local_filenames = set()
-          for row in existing_mappings.values():
-              existing_local_filenames.add(row['Local_Filename'])
-
-          for url, info in new_mappings.items():
-              remote_filename = info['Remote_Filename']
-              if remote_filename in filename_count:
-                  filename_count[remote_filename] += 1
-              else:
-                  filename_count[remote_filename] = 1
-              if filename_count[remote_filename] > 1 or remote_filename in existing_local_filenames:
-                  conflict_remote_filenames.add(remote_filename)
-
-          updated_mappings = {}
-          for url, row in existing_mappings.items():
-              local_filename = row['Local_Filename']
-              if row['Remote_Filename'] in conflict_remote_filenames:  # 使用 Remote_Filename
-                  parsed_url = urlparse(url)
-                  last_segment = parsed_url.path.split('/')[-2] if len(parsed_url.path.split('/')) >= 3 and parsed_url.path.split('/')[-2] else 'default' # 避免索引错误
-                  local_filename = f"{last_segment}-{row['Remote_Filename']}" # 使用 Remote_Filename
-              updated_mappings[url] = {'Remote_Filename': row['Remote_Filename'], 'Local_Filename': local_filename, 'Hash': row['Hash']}
-
-          for url, info in new_mappings.items():
-              local_filename = info['Local_Filename']
-              if info['Remote_Filename'] in conflict_remote_filenames: # 使用 Remote_Filename
-                  parsed_url = urlparse(url)
-                  last_segment = parsed_url.path.split('/')[-2] if len(parsed_url.path.split('/')) >= 3 and parsed_url.path.split('/')[-2] else 'default' # 避免索引错误
-                  local_filename = f"{last_segment}-{info['Remote_Filename']}" # 使用 Remote_Filename
-              updated_mappings[url] = {'Remote_Filename': info['Remote_Filename'], 'Local_Filename': local_filename, 'Hash': info['Hash']}
-
-
-          # --- Update Temp Mapping File ---
-          with open(temp_mapping_file_path, mode='w', newline='') as temp_file:
-              writer = csv.writer(temp_file)
-              writer.writerow(['URL', 'Remote_Filename', 'Local_Filename', 'Hash'])
-              for url, info in updated_mappings.items():
-                  writer.writerow([url, info['Remote_Filename'], info['Local_Filename'], info['Hash']])
-
-          # --- Generate Delete List ---
-          del_list = []
-          updated_urls = set(updated_mappings.keys())
-          for url, row in existing_mappings.items():
-              if url not in updated_urls:
-                  del_list.append(row['Local_Filename'])
-
-          with open(del_list_file_path, mode='w') as del_file:
-              for filename in del_list:
-                  del_file.write(f"{filename}\n")
-
-          print(f"Temp mapping file: {temp_mapping_file_path}")
-          print(f"Working directory: {os.getcwd()}")
-          os.replace(temp_mapping_file_path, mapping_file_path)
-
-          EOF
-
-      - name: Download Updated Files
-        working-directory: ${{ github.workspace }}
+      - name: Handle file name conflicts
         run: |
-          if [ -f "${{ env.TEMP_MAPPING_FILE }}" ]; then
-            while IFS=',' read -r url remote_filename local_filename hash; do
-              local_file="${{ env.OUTPUT_DIR }}/${local_filename}"
-              if ! test -f "$local_file" || [ "$(md5sum $local_file | awk '{ print $1 }')" != "$hash" ]; then
-                echo "Downloading: $url to $local_file"
-                wget --continue -O "$local_file" "$url" || echo "Failed to download $url. Skipping."
+          # 处理文件名冲突
+          # 创建 temp_mapping.csv
+          echo "url,remote_file_name,local_file_name,hash" > temp_mapping.csv
+
+          # 如果 mapping.csv 存在，将其内容写入 temp_mapping.csv
+          if [[ -f "mapping.csv" ]]; then
+            cat mapping.csv >> temp_mapping.csv
+          fi
+
+          # 读取 rules-list.txt，比对 temp_mapping.csv
+          while IFS= read -r url; do
+            if ! grep -q "$url" temp_mapping.csv; then
+              echo "$url,,," >> temp_mapping.csv # 如果 URL 不存在，则添加到 temp_mapping.csv
+            fi
+          done < rules-list.txt
+
+          # 如果 rules-list.txt 中没有的 URL，从 temp_mapping.csv 中删除
+          while IFS= read -r url; do
+            if ! grep -q "$url" rules-list.txt; then
+              local_file_name=$(grep "$url" temp_mapping.csv | cut -d',' -f3)
+              echo "$local_file_name" >> del_list.txt # 记录需要删除的文件名到 del_list.txt
+              sed -i "/$url/d" temp_mapping.csv # 从 temp_mapping.csv 中删除表项
+            fi
+          done < <(cut -d',' -f1 temp_mapping.csv | grep -v 'url')
+
+          # 填充远程文件名并处理冲突
+          sed -i '1d' temp_mapping.csv # 删除表头
+          while IFS= read -r entry; do
+            url=$(echo "$entry" | cut -d',' -f1)
+            remote_file_name=$(basename "$url")
+            echo "$url,$remote_file_name,,$(echo "$entry" | cut -d',' -f4)" >> temp_mapping.tmp
+          done < temp_mapping.csv
+
+          mv temp_mapping.tmp temp_mapping.csv
+
+      - name: Update files
+        run: |
+          # 更新文件
+          while IFS= read -r entry; do
+            url=$(echo "$entry" | cut -d',' -f1)
+            remote_file_name=$(echo "$entry" | cut -d',' -f2)
+            local_file_name=$(echo "$entry" | cut -d',' -f3)
+            hash=$(echo "$entry" | cut -d',' -f4)
+
+            # 比较哈希值，决定是否需要下载
+            if [[ -f "rules/$local_file_name" ]]; then
+              current_hash=$(sha256sum "rules/$local_file_name" | awk '{print $1}')
+              if [[ "$current_hash" == "$hash" ]]; then
+                echo "File $local_file_name is up to date."
+                continue
               fi
-            done < <(tail -n +2 "${{ env.TEMP_MAPPING_FILE }}")
-          else
-            echo "No new or updated files to download."
+            fi
+
+            # 下载文件
+            curl -s -L "$url" -o "rules/$local_file_name"
+            new_hash=$(sha256sum "rules/$local_file_name" | awk '{print $1}')
+            sed -i "s|$url,$remote_file_name,$local_file_name,$hash|$url,$remote_file_name,$local_file_name,$new_hash|" temp_mapping.csv
+          done < temp_mapping.csv
+
+      - name: Clean old files
+        run: |
+          # 清理旧文件
+          if [[ -f "del_list.txt" ]]; then
+            while IFS= read -r file; do
+              rm -f "rules/$file"
+            done < del_list.txt
           fi
 
-      - name: Delete Obsolete Files
-        working-directory: ${{ github.workspace }}
+      - name: Update mapping file
         run: |
-          if [ -f "${{ env.DEL_LIST_FILE }}" ]; then
-            while IFS= read -r filename; do
-              echo "Deleting obsolete file: ${{ env.OUTPUT_DIR }}/$filename"
-              rm -f "${{ env.OUTPUT_DIR }}/$filename" || echo "Failed to delete $filename. Skipping."
-            done < "${{ env.DEL_LIST_FILE }}"
+          # 更新映射文件
+          if [[ -f "mapping.csv" ]]; then
+            cp temp_mapping.csv mapping.csv
+            rm -f temp_mapping.csv
           else
-            echo "No obsolete files to delete."
+            mv temp_mapping.csv mapping.csv
           fi
+          rm -f del_list.txt
 
-      - name: Update Mapping CSV and Cleanup
-        working-directory: ${{ github.workspace }}
+      - name: Commit changes
         run: |
-          rm "${{ env.TEMP_MAPPING_FILE }}"
-          rm "${{ env.DEL_LIST_FILE }}"
-          echo "Mapping CSV updated and temporary files cleaned up."
-
-      - name: List Files in Rules Directory (Post-Sync)
-        working-directory: ${{ github.workspace }}
-        run: ls -la "${{ env.OUTPUT_DIR }}"
-
-      - name: Commit and Push Changes
-        working-directory: ${{ github.workspace }}
-        run: |
+          # 提交更改
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
-          git add "${{ env.OUTPUT_DIR }}"
-          git add "${{ env.MAPPING_FILE }}"
-          git diff-index --quiet HEAD || git commit -m "Update rules files from rules-list.txt"
-          git push || echo "No changes to push." #  添加 push || echo 防止没有 commit 时 push 失败
+          git add rules mapping.csv
+          git commit -m "Updated rules and mapping file"
+          git push

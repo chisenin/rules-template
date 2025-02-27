@@ -18,140 +18,27 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install wget
+
       - name: Create rules directory
         run: mkdir -p rules
 
-      - name: Initialize temp_mapping.csv
-        run: |
-          echo "URL,RemoteFileName,LocalFileName,Hash" > temp_mapping.csv
-          if [ -s "mapping.csv" ]; then
-            cat mapping.csv >> temp_mapping.csv
-          fi
-
-      - name: Prepare URL list and clean up
-        run: |
-          touch rules-list.txt
-          if [ -s "rules-list.txt" ]; then
-            > temp_mapping_new.csv
-            echo "URL,RemoteFileName,LocalFileName,Hash" >> temp_mapping_new.csv
-
-            while IFS= read -r url; do
-              if [[ "$url" == \#* || -z "$url" ]]; then
-                continue
-              fi
-              grep -q "$url" temp_mapping.csv
-              if [ $? -ne 0 ]; then
-                echo "$url,,," >> temp_mapping_new.csv
-              else
-                grep "$url" temp_mapping.csv >> temp_mapping_new.csv
-              fi
-            done < rules-list.txt
-
-            > del_list.txt
-            awk -F, 'NR>1 {print $1}' temp_mapping.csv | sort > urls_temp_mapping.txt
-            sort rules-list.txt | grep -v '^#' | grep -v '^$' > urls_rules_list.txt
-            comm -23 urls_temp_mapping.txt urls_rules_list.txt | while read -r url_to_remove; do
-              grep -v "$url_to_remove" temp_mapping.csv >> temp_mapping_new.csv
-              grep "$url_to_remove" temp_mapping.csv | awk -F, '{print $3}' >> del_list.txt
-            done
-
-            mv temp_mapping_new.csv temp_mapping.csv
-          else
-            echo "URL,RemoteFileName,LocalFileName,Hash" > temp_mapping.csv
-            awk -F, 'NR>1 {print $3}' mapping.csv >> del_list.txt
-          fi
-
-      - name: Check if temp_mapping.csv is empty
-        run: |
-          if ! [ $(wc -l < temp_mapping.csv) -gt 1 ]; then
-            echo "No URLs to process. Exiting workflow."
-            exit 1
-          fi
-
-      - name: Process filenames and generate local names
-        run: |
-          awk -F, 'NR>1 {
-            split($1, a, "/");
-            $2 = a[length(a)];
-            print $0;
-          }' temp_mapping.csv > temp_mapping_with_remote.csv
-          mv temp_mapping_with_remote.csv temp_mapping.csv
-
-          awk -F, 'NR>1 {print $2}' temp_mapping.csv | sort | uniq -c | sort -nr > remote_file_counts.txt
-          awk '$1 > 1 {print $2}' remote_file_counts.txt > tracked_remote_files.txt
-
-          while IFS= read -r line; do
-            remote_filename=$(echo "$line" | awk -F, '{print $2}')
-            url=$(echo "$line" | awk -F, '{print $1}')
-
-            grep -q "$remote_filename" tracked_remote_files.txt
-            if [ $? -eq 0 ]; then
-              url_path_second_last=$(echo "$url" | awk -F/ '{print $(NF-1)}')
-              local_filename="$url_path_second_last-$remote_filename"
-            else
-              local_filename="$remote_filename"
-            fi
-
-            echo "$line" | awk -v local_name="$local_filename" -F, '{$3 = local_name; print $0}' >> temp_new.csv
-
-          done < temp_mapping.csv
-          rm temp_mapping.csv
-          mv temp_new.csv temp_mapping.csv
-
-      - name: Download and update files
-        run: |
-          while IFS=, read -r url remote_filename local_filename old_hash; do
-            file_path="rules/$local_filename"
-            case "$remote_filename" in
-              *.srs)
-                if wget -nv -O - "$url" | head -c 1472 > "$file_path"; then
-                  new_hash=$(sha256sum "$file_path" | awk '{print $1}')
-                else
-                  echo "Failed to download $url"
-                  continue
-                fi
-                ;;
-              *.json|*.yaml|*.yml)
-                if wget -nv -O "$file_path" "$url"; then
-                    new_hash=$(sha256sum "$file_path" | awk '{print $1}')
-                else
-                    echo "Failed to download $url"
-                    continue
-                fi
-                ;;
-              *)
-                echo "Unsupported file type: $remote_filename"
-                continue
-                ;;
-            esac
-
-            if [ "$old_hash" != "$new_hash" ]; then
-              echo "Updating $local_filename (Hash: $new_hash)"
-              sed -i "s|$url,$remote_filename,$local_filename,$old_hash|$url,$remote_filename,$local_filename,$new_hash|g" temp_mapping.csv
-            else
-              echo "Skipping $local_filename (Hash matches)"
-            fi
-
-          done < <(tail -n +2 temp_mapping.csv)
-
-      - name: Clean up old files
-        run: |
-          while IFS= read -r file_to_delete; do
-            if [ -f "rules/$file_to_delete" ]; then
-              rm "rules/$file_to_delete"
-              echo "Deleted $file_to_delete"
-            fi
-          done < del_list.txt
-
-      - name: Update mapping file and remove temporary files
-        run: |
-          cp temp_mapping.csv mapping.csv
-          rm temp_mapping.csv
-          rm del_list.txt
-          rm remote_file_counts.txt
-          rm tracked_remote_files.txt
-          rm urls_rules_list.txt
-          rm urls_temp_mapping.txt
+      - name: Initialize and process rules using Python
+        run: python3 scripts/process_rules.py
+        env:
+          RULES_LIST_PATH: rules-list.txt
+          MAPPING_FILE_PATH: mapping.csv
+          TEMP_MAPPING_FILE_PATH: temp_mapping.csv
+          DEL_LIST_FILE_PATH: del_list.txt
+          RULES_DIR_PATH: rules
 
       - name: List files in rules directory
         run: ls -l rules

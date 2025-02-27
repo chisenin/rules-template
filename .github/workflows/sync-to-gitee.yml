@@ -1,0 +1,22 @@
+name: Sync to Gitee
+
+on:
+  push:
+    branches:
+      - main  # 可根据实际情况修改为你要同步的分支
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Sync to Gitee
+        uses: wearerequired/git-mirror-action@master
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.GITEE_TOKEN }}
+        with:
+          source-repo: "git@github.com:https://github.com/chisenin/rules-template.git"  # 修改为你的GitHub仓库地址
+          destination-repo: "git@gitee.com:https://gitee.com/chisenin/rules-template.git"  # 修改为你的Gitee仓库地址

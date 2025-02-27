@@ -42,10 +42,9 @@ def process_url_list():
         if any(url in row for row in new_rows):
             continue
 
-        if not any(url in row for row in new_rows):
+        if not any(url in row for row in read_file_lines(TEMP_MAPPING_FILE_PATH)):
             new_row = [url, '', '', '']
-            if not any(url in row for row in read_file_lines(TEMP_MAPPING_FILE_PATH)):
-                new_rows.append(new_row)
+            new_rows.append(new_row)
 
     existing_rows = read_file_lines(TEMP_MAPPING_FILE_PATH)
     all_rows = existing_rows + new_rows
@@ -92,6 +91,9 @@ def process_filenames_and_generate_local_names():
 
     remote_file_counts = {}
     for row in rows:
+        if len(row) < 2:
+            print(f"Skipping invalid row: {row}")
+            continue
         remote_filename = row[1]
         if remote_filename in remote_file_counts:
             remote_file_counts[remote_filename] += 1
@@ -102,6 +104,9 @@ def process_filenames_and_generate_local_names():
 
     new_rows = []
     for row in rows:
+        if len(row) < 2:
+            print(f"Skipping invalid row: {row}")
+            continue
         url, remote_filename, local_filename, hash_value = row
         if remote_filename in tracked_remote_files:
             url_parts = url.rstrip('/').split('/')
@@ -121,6 +126,9 @@ def download_and_update_files():
     rows = [row.strip().split(',') for row in temp_mapping[1:]]
 
     for row in rows:
+        if len(row) < 2:
+            print(f"Skipping invalid row: {row}")
+            continue
         url, remote_filename, local_filename, old_hash = row
         file_path = os.path.join(RULES_DIR_PATH, local_filename)
 

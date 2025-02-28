@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main  # 可根据实际情况修改为你要同步的分支
+    workflow_dispatch:
 
 jobs:
   sync:

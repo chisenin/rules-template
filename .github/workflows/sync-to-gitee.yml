@@ -11,12 +11,16 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v2
+
+      - name: Configure Git safe directory
+        run: git config --global --add safe.directory /github/workspace
 
       - name: Sync to Gitee
         uses: wearerequired/git-mirror-action@master
         env:
-          SSH_PRIVATE_KEY: ${{ secrets.GITEE_TOKEN }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
         with:
-          source-repo: "git@github.com:chisenin/rules-template.git"  # 修改为你的GitHub仓库地址
-          destination-repo: "git@gitee.com:chisenin/rules-template.git"  # 修改为你的Gitee仓库地址
+          source-repo: "git@github.com:chisenin/rules-template.git"
+          destination-repo: "git@gitee.com:chisenin/rules-template.git"
+          dry-run: false

@@ -13,14 +13,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
 
-      - name: Configure Git safe directory
-        run: git config --global --add safe.directory /github/workspace
-
       - name: Sync to Gitee
         uses: wearerequired/git-mirror-action@master
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
         with:
           source-repo: "git@github.com:chisenin/rules-template.git"
-          destination-repo: "git@gitee.com:chisenin/rules-template.git"
+          destination-repo: "https://${{ secrets.GITEE_TOKEN }}@gitee.com/chisenin/rules-template.git"
           dry-run: false

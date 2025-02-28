@@ -3,23 +3,23 @@ name: Sync to Gitee
 on:
   push:
     branches:
-      - main  # 可根据实际情况修改为你要同步的分支
-    workflow_dispatch:
+      - main  # 触发条件：当 main 分支有推送时
 
 jobs:
   sync:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4  # 使用 v4 版本的 checkout 动作
+        with:
+          fetch-depth: 0  # 获取所有历史记录
 
       - name: Sync to Gitee
-        uses: wearerequired/git-mirror-action@master
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+        uses: Yikun/hub-mirror-action@master  # 使用 hub-mirror-action 进行同步
         with:
-          source-repo: "git@github.com:chisenin/rules-template.git"
-          destination-repo: "https://${{ secrets.GITEE_TOKEN }}@gitee.com/chisenin/rules-template.git"
-          dry-run: false
+          src: github/chisenin/rules-template  # 源 GitHub 仓库
+          dst: gitee/chisenin/rules-template  # 目标 Gitee 仓库
+          dst_key: ${{ secrets.GITEE_PRIVATE_KEY }}  # Gitee 私钥
+          dst_token: ${{ secrets.GITEE_TOKEN }}  # Gitee 访问令牌
+          force_update: true  # 强制更新

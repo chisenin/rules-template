@@ -13,6 +13,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
 
+      - name: Configure Git safe directory
+        run: git config --global --add safe.directory /github/workspace
+
       - name: Sync to Gitee
         uses: wearerequired/git-mirror-action@master
         env:

@@ -23,5 +23,4 @@ https://github.com/chisenin/rules-template/raw/refs/heads/main/rules/geoip-cn.sr
 https://github.com/chisenin/rules-template/raw/refs/heads/main/rules/geosite-cn.srs
 https://github.com/chisenin/rules-template/raw/refs/heads/main/rules/youtube.srs
 https://github.com/chisenin/rules-template/raw/refs/heads/main/rules/geosite-google.srs
-https://github.com/chisenin/rules-template/raw/refs/heads/main/rules/xnxx.srs
-https://github.com/chisenin/rules-template/raw/refs/heads/main/rules/xvideos.srs
+https://github.com/chisenin/rules-template/raw/refs/heads/main/rules/custom_reject.json

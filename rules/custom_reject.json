@@ -1,0 +1,19 @@
+{
+	"version": 1,
+	"rules": [
+		{
+			"domain": [
+				"xnxx.com",
+				"xvideos.com",
+				"thismv.com"
+			]
+		},
+		{
+			"domain_suffix": [
+				".xnxx.com",
+				".xvideos.com",
+				".thismv.com"
+			]
+		}
+	]
+}

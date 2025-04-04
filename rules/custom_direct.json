@@ -8,7 +8,8 @@
 				"qianfan.baidubce.com",
 				"ark.cn-beijing.volces.com",
 				"chat.qwenlm.ai",
-				"openrouter.ai"
+				"openrouter.ai",
+				"tailscale.com"
 			]
 		},
 		{
@@ -16,7 +17,8 @@
 				".deepseek.com",
 				".siliconflow.cn",
 				".tailscale.com",
-				".openrouter.ai"
+				".openrouter.ai",
+				".tailscale.com"
 			]
 		}
 	]

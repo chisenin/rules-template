@@ -24,3 +24,4 @@ https://github.com/chisenin/rules-template/raw/refs/heads/main/rules/geosite-cn.
 https://github.com/chisenin/rules-template/raw/refs/heads/main/rules/youtube.srs
 https://github.com/chisenin/rules-template/raw/refs/heads/main/rules/geosite-google.srs
 https://github.com/chisenin/rules-template/raw/refs/heads/main/rules/custom_reject.json
+https://github.com/chisenin/rules-template/raw/refs/heads/main/rules/clash-all-globe-noicon.ini

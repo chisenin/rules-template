@@ -76,5 +76,3 @@ https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geosite/aliy
 # cn_geosite-geolocation
 https://github.com/SagerNet/sing-geosite/raw/refs/heads/rule-set/geosite-geolocation-!cn.srs
 
-# clash-all-globe-noicon
-https://github.com/liandu2024/clash/raw/refs/heads/main/proxy/clash-all-globe-noicon.ini

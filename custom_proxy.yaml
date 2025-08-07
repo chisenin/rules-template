@@ -1,10 +1,13 @@
-payload:
-  - monica.im
-  - groq.com
-  - grok.com
-  - a-hospital.com
-  - .qichiyu.com
-  - .genspark.ai
-  - .groq.com
-  - .grok.com
-  - .a-hospital.com
+version: 1
+rules:
+  - domain: 
+      - monica.im
+      - groq.com
+      - grok.com
+      - a-hospital.com
+  - domain_suffix:
+      - qichiyu.com
+      - genspark.ai
+      - groq.com
+      - grok.com
+      - a-hospital.com

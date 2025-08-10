@@ -9,6 +9,7 @@ rules:
       - openrouter.ai
       - tailscale.com
       - vercel.com
+      - mail.163.com
   - domain_suffix:
       - .deepseek.com
       - .siliconflow.cn

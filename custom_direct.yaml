@@ -10,6 +10,7 @@ rules:
       - tailscale.com
       - vercel.com
       - mail.163.com
+      - mirrors.vsean.net
   - domain_suffix:
       - .deepseek.com
       - .siliconflow.cn

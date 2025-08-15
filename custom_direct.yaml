@@ -11,6 +11,7 @@ rules:
       - vercel.com
       - mail.163.com
       - mirrors.vsean.net
+      - skywork.ai
   - domain_suffix:
       - .deepseek.com
       - .siliconflow.cn

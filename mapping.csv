@@ -1,7 +1,7 @@
 URL,RemoteFileName,LocalFileName,Hash
 https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geoip/private.srs,private.srs,geoip-private.srs,86811ff6dd4d50710b7d345819a1716c
 https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geosite/private.srs,private.srs,geosite-private.srs,b1f814ff711a9c9e8b1b87ecccb043b5
-https://raw.githubusercontent.com/REIJI007/AdBlock_Rule_For_Sing-box/main/adblock_reject.srs,adblock_reject.srs,adblock_reject.srs,341125c7576432a01d48ac9cc485509d
+https://raw.githubusercontent.com/REIJI007/AdBlock_Rule_For_Sing-box/main/adblock_reject.srs,adblock_reject.srs,adblock_reject.srs,e559b27cf8a3c8fa1f9ee6091c72d89a
 https://github.com/chisenin/rules-template/raw/refs/heads/main/custom_direct.json,custom_direct.json,custom_direct.json,1e1dd4deecf7984743eec711841b3ca0
 https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geosite/aliyun.srs,aliyun.srs,aliyun.srs,284c932b74c83f3664dcdeaa79f493a8
 https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geosite/github.srs,github.srs,github.srs,3d7b9cbf2f261f9e5c8d2140373758e5
@@ -10,7 +10,7 @@ https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geosite/tele
 https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geosite/tiktok.srs,tiktok.srs,tiktok.srs,33ff90ae4b0de3fedc3dbce12a175fb8
 https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geosite/microsoft.srs,microsoft.srs,microsoft.srs,755ed505fc405a8d12032119540788bc
 https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geosite/google-gemini.srs,google-gemini.srs,google-gemini.srs,f8d945b04d7306566958c60b51552808
-https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geoip/google.srs,google.srs,geoip-google.srs,dc2381a01ce6cdd3f0a8c4b260449dca
+https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geoip/google.srs,google.srs,geoip-google.srs,b171fbd22c2609d6b3e33027a6a905b9
 https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geoip/netflix.srs,netflix.srs,geoip-netflix.srs,2e4625a3acb08d18f8aa489c24612422
 https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geosite/netflix.srs,netflix.srs,geosite-netflix.srs,20743421d1f0a761fb33ce024fb6d34b
 https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo-lite/geoip/apple.srs,apple.srs,geoip-apple.srs,5ece000833a63eb25cfbb7755857fa81
@@ -18,10 +18,10 @@ https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geosite/appl
 https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geosite/anthropic.srs,anthropic.srs,anthropic.srs,374ffec20059844e4642f0f49e0c2602
 https://github.com/chisenin/rules-template/raw/refs/heads/main/custom_proxy.json,custom_proxy.json,custom_proxy.json,c5f95b31cc69f90a3d8a62f8332cc2ba
 https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geosite/aliyun@!cn.srs,aliyun@!cn.srs,aliyun@!cn.srs,ec3df0f9164336b7ccdf64c295941e62
-https://github.com/SagerNet/sing-geosite/raw/refs/heads/rule-set/geosite-geolocation-!cn.srs,geosite-geolocation-!cn.srs,geosite-geolocation-!cn.srs,3373a9ab6af3c9f6031e6ae43c710b67
+https://github.com/SagerNet/sing-geosite/raw/refs/heads/rule-set/geosite-geolocation-!cn.srs,geosite-geolocation-!cn.srs,geosite-geolocation-!cn.srs,49cc7c8f2837abd9608ac7876335e37a
 https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geosite/openai.srs,openai.srs,openai.srs,cc782c417ebcb6bb34389ab66fa20e25
-https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geoip/cn.srs,cn.srs,geoip-cn.srs,744e52e6397ec28dd78b522f925ea3b6
-https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geosite/cn.srs,cn.srs,geosite-cn.srs,dc8e929e77941c22b51ec162503a54f0
+https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geoip/cn.srs,cn.srs,geoip-cn.srs,341457112616014b5aecfb6490497271
+https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geosite/cn.srs,cn.srs,geosite-cn.srs,f1a4951289c927e9c9e1e013c6115677
 https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geosite/youtube.srs,youtube.srs,youtube.srs,94028c267a7721cb63aaf38070b56936
-https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geosite/google.srs,google.srs,geosite-google.srs,4fdc5a850df3a0d666b6aa0d6c8c4493
+https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geosite/google.srs,google.srs,geosite-google.srs,9a484970646a3674b2f9c20286e7d8d5
 https://github.com/chisenin/rules-template/raw/refs/heads/main/custom_reject.json,custom_reject.json,custom_reject.json,04a1a6f4303bb946eec911e783f90e52

@@ -1,40 +1,42 @@
 ########################################
-# 2026 Mihomo 终极旗舰版
+# 2026 Mihomo Nikki 内核 – 完整注释版 YAML
+# 功能：终极旗舰版 + GeoIP 优化 + 缓存容错
 ########################################
 
 # =============================
 # 1. 全局基础设置
 # =============================
-mixed-port: 7890
-socks-port: 7891
-redir-port: 7892
-tproxy-port: 7894
+mixed-port: 7890              # 透明代理端口
+socks-port: 7891              # SOCKS5 端口
+redir-port: 7892              # REDIR 端口
+tproxy-port: 7894             # TProxy 端口
 
-allow-lan: true
-bind-address: "*"
-mode: rule
-log-level: warning
-ipv6: false
+allow-lan: true               # 是否允许局域网设备访问
+bind-address: "*"             # 绑定网卡
+mode: rule                    # 规则模式
+log-level: info               # 日志级别: info/warning/error
+ipv6: false                   # 是否启用 IPv6
 
-tcp-concurrent: true
-unified-delay: true
+tcp-concurrent: true          # 并发 TCP
+unified-delay: true           # 统一延迟计算
 
-keep-alive-idle: 600
-keep-alive-interval: 15
+keep-alive-idle: 600          # TCP Keep-Alive 空闲时间
+keep-alive-interval: 15       # TCP Keep-Alive 间隔
 
-global-client-fingerprint: chrome
+global-client-fingerprint: chrome  # 模拟浏览器指纹
 profile:
-  store-selected: true
-  store-fake-ip: true
+  store-selected: true        # 保存已选节点
+  store-fake-ip: true         # 保存 Fake-IP
 
 # =============================
-# 2. 订阅 Providers
+# 2. Proxy Providers（机场订阅 + 规则集）
 # =============================
 proxy-providers:
+  # 机场订阅示例
   airport:
     type: http
-    url: "机场订阅链接"
-    interval: 86400
+    url: "你的机场订阅链接"
+    interval: 86400           # 每 24 小时更新一次
     path: ./proxies/airport.yaml
     health-check:
       enable: true
@@ -42,25 +44,26 @@ proxy-providers:
       interval: 300
     proxy: 直连
 
+  # 自动规则集下载
   auto-rules:
     type: http
     url: "https://github.com/MetaCubeX/meta-rules-dat/releases/latest/download/meta-rules-dat.mrs"
     interval: 86400
-    behavior: classical
+    behavior: classical       # 经典规则格式
 
 # =============================
-# 3. 节点 Proxy 列表
+# 3. 节点列表
 # =============================
 proxies:
   - name: 直连
     type: direct
 
 # =============================
-# 4. TUN / 网络接管
+# 4. TUN / 网络接管（Nikki 内核特化）
 # =============================
 tun:
   enable: true
-  stack: mixed
+  stack: mixed                # 混合模式
   auto-route: true
   auto-detect-interface: true
   strict-route: true
@@ -68,7 +71,7 @@ tun:
     - any:53
 
 # =============================
-# 5. DNS – Fake-IP + Fallback + Cache
+# 5. DNS 配置 – Fake-IP + 缓存 + Fallback
 # =============================
 dns:
   enable: true
@@ -76,8 +79,9 @@ dns:
   ipv6: false
   enhanced-mode: fake-ip
   fake-ip-range: 28.0.0.1/8
-  cache-algorithm: arc
+  cache-algorithm: arc        # 高效缓存算法
 
+  # Fake-IP 白名单
   fake-ip-filter:
     - "*.lan"
     - "*.local"
@@ -87,28 +91,37 @@ dns:
     - "*.apple.com"
     - "time.windows.com"
 
+  # 默认和上游 Nameserver
   default-nameserver:
     - 223.5.5.5
     - 119.29.29.29
-
   nameserver:
     - 223.5.5.5
     - 119.29.29.29
 
+  # Fallback DNS（容错与超时）
   fallback:
     - https://1.1.1.1/dns-query
     - https://8.8.8.8/dns-query
     - https://dns.google/dns-query
-
   fallback-filter:
     geoip: true
     geoip-code: CN
 
 # =============================
-# 6. 核心策略组
+# 6. GeoIP / GeoSite 缓存与 MMDB 优化
+# =============================
+geodata:
+  cache-path: /etc/nikki/run/geodata  # 缓存路径，确保目录可写
+  download-timeout: 30                 # MMDB 下载超时时间（秒）
+  max-retries: 3                       # 下载失败重试次数
+  auto-download: true                  # 启动时自动下载 MMDB 文件
+
+# =============================
+# 7. 核心策略组
 # =============================
 proxy-groups:
-
+  # 自动测速 & 节点评分
   - name: AUTO
     type: url-test
     include-all: true
@@ -137,7 +150,7 @@ proxy-groups:
     include-all: true
     strategy: consistent-hashing
 
-  # 国家/区域分组
+  # 国家节点分组
   - name: HK
     type: select
     include-all: true
@@ -207,13 +220,14 @@ proxy-groups:
       - 直连
 
 # =============================
-# 7. 规则部分
+# 8. 规则部分
 # =============================
 rules:
-
+  # AI / ChatGPT
   - RULE-SET,ai,AI
   - RULE-SET,openai_api,AI
 
+  # 流媒体
   - RULE-SET,netflix,NETFLIX
   - RULE-SET,youtube,STREAM
   - RULE-SET,disneyplus,STREAM
@@ -221,22 +235,25 @@ rules:
   - RULE-SET,primevideo,STREAM
   - RULE-SET,roku,STREAM
 
+  # 社交软件
   - RULE-SET,telegram,PROXY
   - RULE-SET,whatsapp,PROXY
 
+  # 开发者网站
   - RULE-SET,github,PROXY
   - RULE-SET,stackoverflow,PROXY
 
+  # 系统服务 & 国内流量直连
   - RULE-SET,apple,直连
   - RULE-SET,microsoft,直连
-
   - RULE-SET,cn_domain,直连
   - RULE-SET,cn_ip,直连
 
+  # 默认策略
   - MATCH,PROXY
 
 # =============================
-# 8. 规则集 Anchor Sources
+# 9. 规则集 Anchor Sources
 # =============================
 rule-anchor:
   ip: &ip
@@ -252,7 +269,6 @@ rule-anchor:
     format: mrs
 
 rule-providers:
-
   ai:
     <<: *domain
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ai-!cn.mrs
@@ -318,5 +334,5 @@ rule-providers:
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/cn.mrs
 
 ########################################
-# End of 2026 Mihomo 终极旗舰版
+# End of 2026 Mihomo Nikki 内核 完整注释版
 ########################################

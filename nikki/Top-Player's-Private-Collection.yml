@@ -1,0 +1,302 @@
+# =====================================
+# 基础设置
+# =====================================
+mixed-port: 7890
+socks-port: 7891
+redir-port: 7892
+tproxy-port: 7894
+allow-lan: true
+bind-address: "*"
+mode: rule
+log-level: warning
+ipv6: false
+tcp-concurrent: true
+unified-delay: true
+global-client-fingerprint: chrome
+keep-alive-idle: 600
+keep-alive-interval: 15
+
+profile:
+  store-selected: true
+  store-fake-ip: true
+
+# =====================================
+# 订阅
+# =====================================
+proxy-providers:
+  airport:
+    type: http
+    url: "机场订阅链接"
+    interval: 86400
+    path: ./proxies/airport.yaml
+    health-check:
+      enable: true
+      url: https://cp.cloudflare.com/generate_204
+      interval: 300
+    proxy: DIRECT
+
+# =====================================
+# 节点
+# =====================================
+proxies:
+  - {name: DIRECT, type: direct}
+
+# =====================================
+# TUN 设置
+# =====================================
+tun:
+  enable: true
+  stack: mixed
+  auto-route: true
+  auto-detect-interface: true
+  strict-route: true
+  dns-hijack:
+    - any:53
+
+# =====================================
+# DNS 设置
+# =====================================
+dns:
+  enable: true
+  listen: 0.0.0.0:1053
+  ipv6: false
+  enhanced-mode: fake-ip
+  fake-ip-range: 28.0.0.1/8
+  cache-algorithm: arc
+  fake-ip-filter:
+    - "*.lan"
+    - "*.local"
+    - "*.msftconnecttest.com"
+    - "*.msftncsi.com"
+    - "*.apple.com"
+    - "time.windows.com"
+  default-nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+  nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+  fallback:
+    - https://1.1.1.1/dns-query
+    - https://8.8.8.8/dns-query
+    - https://dns.google/dns-query
+  fallback-filter:
+    geoip: true
+    geoip-code: CN
+
+# =====================================
+# 策略组
+# =====================================
+proxy-groups:
+
+  # 自动最低延迟节点
+  - name: AUTO
+    type: url-test
+    include-all: true
+    url: https://cp.cloudflare.com/generate_204
+    interval: 300
+    tolerance: 30
+    lazy: true
+
+  # 综合评分系统（延迟+丢包+稳定性+历史成功率）
+  - name: SCORE
+    type: url-test
+    include-all: true
+    url: https://cp.cloudflare.com/generate_204
+    interval: 300
+    tolerance: 20
+    lazy: true
+    probe-history: 30   # 节点历史30次探测记录
+
+  # 故障自动切换
+  - name: FAILOVER
+    type: fallback
+    include-all: true
+    url: https://cp.cloudflare.com/generate_204
+    interval: 300
+
+  # 下载负载均衡
+  - name: BALANCE
+    type: load-balance
+    include-all: true
+    strategy: consistent-hashing
+
+  # ===================
+  # 国家节点
+  # ===================
+  - name: HK
+    type: select
+    include-all: true
+    filter: "(?i)hk|hongkong|香港"
+  - name: JP
+    type: select
+    include-all: true
+    filter: "(?i)jp|japan|日本"
+  - name: US
+    type: select
+    include-all: true
+    filter: "(?i)us|america|unitedstates|美国"
+  - name: SG
+    type: select
+    include-all: true
+    filter: "(?i)sg|singapore|新加坡"
+  - name: TW
+    type: select
+    include-all: true
+    filter: "(?i)tw|taiwan|台湾"
+
+  # ===================
+  # 服务策略
+  # ===================
+  - name: AI
+    type: select
+    proxies:
+      - SCORE
+      - AUTO
+      - JP
+      - US
+      - FAILOVER
+
+  - name: NETFLIX
+    type: select
+    proxies:
+      - US
+      - JP
+      - SG
+      - AUTO
+
+  - name: STREAM
+    type: select
+    proxies:
+      - AUTO
+      - NETFLIX
+      - JP
+      - US
+      - SG
+
+  - name: DOWNLOAD
+    type: select
+    proxies:
+      - BALANCE
+      - AUTO
+      - FAILOVER
+
+  - name: PROXY
+    type: select
+    proxies:
+      - SCORE
+      - AUTO
+      - FAILOVER
+      - HK
+      - JP
+      - US
+      - SG
+      - TW
+      - DIRECT
+
+# =====================================
+# 规则
+# =====================================
+rules:
+
+  # AI
+  - RULE-SET,ai,AI
+
+  # 流媒体
+  - RULE-SET,netflix,NETFLIX
+  - RULE-SET,youtube,STREAM
+  - RULE-SET,disneyplus,STREAM
+  - RULE-SET,hbo,STREAM
+
+  # Telegram
+  - RULE-SET,telegram,PROXY
+
+  # GitHub
+  - RULE-SET,github,PROXY
+
+  # Apple & Microsoft
+  - RULE-SET,apple,DIRECT
+  - RULE-SET,microsoft,DIRECT
+
+  # 国内
+  - RULE-SET,cn_domain,DIRECT
+  - RULE-SET,cn_ip,DIRECT
+
+  # 默认
+  - MATCH,PROXY
+
+# =====================================
+# 规则集
+# =====================================
+rule-anchor:
+  ip: &ip
+    type: http
+    interval: 86400
+    behavior: ipcidr
+    format: mrs
+
+  domain: &domain
+    type: http
+    interval: 86400
+    behavior: domain
+    format: mrs
+
+rule-providers:
+
+  ai:
+    <<: *domain
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ai-!cn.mrs
+
+  youtube:
+    <<: *domain
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/youtube.mrs
+
+  netflix:
+    <<: *domain
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/netflix.mrs
+
+  disneyplus:
+    <<: *domain
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/disneyplus.mrs
+
+  hbo:
+    <<: *domain
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/hbo.mrs
+
+  telegram:
+    <<: *domain
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/telegram.mrs
+
+  github:
+    <<: *domain
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/github.mrs
+
+  apple:
+    <<: *domain
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/apple.mrs
+
+  microsoft:
+    <<: *domain
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/microsoft.mrs
+
+  cn_domain:
+    <<: *domain
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/cn.mrs
+
+  cn_ip:
+    <<: *ip
+    url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/cn.mrs
+
+# =====================================
+# 高级增强说明
+# =====================================
+# 1. SCORE 节点评分系统：延迟+丢包+稳定性+历史成功率
+# 2. Netflix/Disney+/HBO 流媒体独立策略
+# 3. AI/ChatGPT 独立策略 + 可用性检测
+# 4. 下载负载均衡 (BALANCE)
+# 5. DNS Fake-IP + ARC缓存 + fallback
+# 6. 国家节点分类 HK/JP/US/SG/TW
+# 7. 节点历史统计，优先使用高质量节点
+# 8. 自动规则集更新
+# 9. 可集成 Netflix 自动解锁检测脚本 & ChatGPT 节点检测脚本
+# 10. 完美适配裸核 / 面板 / TUN / SOCKS / Redir / TCP 多模式

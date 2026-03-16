@@ -1,5 +1,5 @@
 ########################################
-# 2026 mihomo 终极旗舰版 – 全局唯一节点修正版
+# 2026 Mihomo 终极旗舰版
 ########################################
 
 # =============================
@@ -230,8 +230,6 @@ rules:
   - RULE-SET,apple,直连
   - RULE-SET,microsoft,直连
 
-  - RULE-SET,dns_services,直连
-
   - RULE-SET,cn_domain,直连
   - RULE-SET,cn_ip,直连
 
@@ -319,6 +317,6 @@ rule-providers:
     <<: *ip
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/cn.mrs
 
-# =============================
+########################################
 # End of 2026 Mihomo 终极旗舰版
-# =============================
+########################################

@@ -1,5 +1,5 @@
 ########################################
-# 2026 mihomo 终极旗舰版 – 全功能结构
+# 2026 mihomo 终极旗舰版 – 全局唯一节点修正版
 ########################################
 
 # =============================
@@ -40,9 +40,8 @@ proxy-providers:
       enable: true
       url: https://cp.cloudflare.com/generate_204
       interval: 300
-    proxy: DIRECT
+    proxy: 直连
 
-  # 自动最新规则集下载
   auto-rules:
     type: http
     url: "https://github.com/MetaCubeX/meta-rules-dat/releases/latest/download/meta-rules-dat.mrs"
@@ -53,9 +52,8 @@ proxy-providers:
 # 3. 节点 Proxy 列表
 # =============================
 proxies:
-  - name: DIRECT
+  - name: 直连
     type: direct
-
 
 # =============================
 # 4. TUN / 网络接管
@@ -69,7 +67,6 @@ tun:
   dns-hijack:
     - any:53
 
-
 # =============================
 # 5. DNS – Fake-IP + Fallback + Cache
 # =============================
@@ -77,7 +74,6 @@ dns:
   enable: true
   listen: 0.0.0.0:1053
   ipv6: false
-
   enhanced-mode: fake-ip
   fake-ip-range: 28.0.0.1/8
   cache-algorithm: arc
@@ -113,11 +109,6 @@ dns:
 # =============================
 proxy-groups:
 
-  ##################
-  # 节点智能策略
-  ##################
-
-  # 最低延迟
   - name: AUTO
     type: url-test
     include-all: true
@@ -126,7 +117,6 @@ proxy-groups:
     tolerance: 30
     lazy: true
 
-  # 综合评分（延迟 + 丢包 + 历史成功率）
   - name: SCORE
     type: url-test
     include-all: true
@@ -136,23 +126,18 @@ proxy-groups:
     lazy: true
     probe-history: 50
 
-  # 节点健康备用
   - name: FAILOVER
     type: fallback
     include-all: true
     url: https://cp.cloudflare.com/generate_204
     interval: 300
 
-  # 下载负载均衡
   - name: BALANCE
     type: load-balance
     include-all: true
     strategy: consistent-hashing
 
-  ##################
-  # 国家/区域节点分组
-  ##################
-
+  # 国家/区域分组
   - name: HK
     type: select
     include-all: true
@@ -174,11 +159,7 @@ proxy-groups:
     include-all: true
     filter: "(?i)tw|taiwan|台湾"
 
-  ##################
-  # 服务优化策略分组
-  ##################
-
-  # AI / OpenAI / ChatGPT
+  # 服务策略
   - name: AI
     type: select
     proxies:
@@ -188,7 +169,6 @@ proxy-groups:
       - US
       - FAILOVER
 
-  # Netflix 解锁优化
   - name: NETFLIX
     type: select
     proxies:
@@ -197,7 +177,6 @@ proxy-groups:
       - SG
       - AUTO
 
-  # 流媒体视频
   - name: STREAM
     type: select
     proxies:
@@ -207,7 +186,6 @@ proxy-groups:
       - US
       - SG
 
-  # 大文件下载
   - name: DOWNLOAD
     type: select
     proxies:
@@ -215,7 +193,6 @@ proxy-groups:
       - AUTO
       - FAILOVER
 
-  # 默认代理
   - name: PROXY
     type: select
     proxies:
@@ -227,18 +204,16 @@ proxy-groups:
       - US
       - SG
       - TW
-      - DIRECT
+      - 直连
 
 # =============================
-# 7. 规则部分（核心规则 + 自动规则集）
+# 7. 规则部分
 # =============================
 rules:
 
-  # AI 类服务分流
   - RULE-SET,ai,AI
   - RULE-SET,openai_api,AI
 
-  # 流媒体服务
   - RULE-SET,netflix,NETFLIX
   - RULE-SET,youtube,STREAM
   - RULE-SET,disneyplus,STREAM
@@ -246,26 +221,20 @@ rules:
   - RULE-SET,primevideo,STREAM
   - RULE-SET,roku,STREAM
 
-  # 即时通讯
   - RULE-SET,telegram,PROXY
   - RULE-SET,whatsapp,PROXY
 
-  # Dev & 社交服务
   - RULE-SET,github,PROXY
   - RULE-SET,stackoverflow,PROXY
 
-  # 操作系统服务
-  - RULE-SET,apple,DIRECT
-  - RULE-SET,microsoft,DIRECT
+  - RULE-SET,apple,直连
+  - RULE-SET,microsoft,直连
 
-  # DNS 相关（避免污染）
-  - RULE-SET,dns_services,DIRECT
+  - RULE-SET,dns_services,直连
 
-  # 国内流量直连
-  - RULE-SET,cn_domain,DIRECT
-  - RULE-SET,cn_ip,DIRECT
+  - RULE-SET,cn_domain,直连
+  - RULE-SET,cn_ip,直连
 
-  # 默认规则
   - MATCH,PROXY
 
 # =============================
@@ -286,7 +255,6 @@ rule-anchor:
 
 rule-providers:
 
-  # AI / ChatGPT
   ai:
     <<: *domain
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ai-!cn.mrs
@@ -295,7 +263,6 @@ rule-providers:
     <<: *domain
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/openai.mrs
 
-  # 流媒体
   netflix:
     <<: *domain
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/netflix.mrs
@@ -320,7 +287,6 @@ rule-providers:
     <<: *domain
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/youtube.mrs
 
-  # 即时通讯
   telegram:
     <<: *domain
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/telegram.mrs
@@ -329,7 +295,6 @@ rule-providers:
     <<: *domain
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/whatsapp.mrs
 
-  # 社交+Dev
   github:
     <<: *domain
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/github.mrs
@@ -338,7 +303,6 @@ rule-providers:
     <<: *domain
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/stackoverflow.mrs
 
-  # OS 系列
   apple:
     <<: *domain
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/apple.mrs
@@ -347,7 +311,6 @@ rule-providers:
     <<: *domain
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/microsoft.mrs
 
-  # 国别直连
   cn_domain:
     <<: *domain
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/cn.mrs
@@ -356,6 +319,6 @@ rule-providers:
     <<: *ip
     url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/cn.mrs
 
-# ===============
-# End of Config
-# ===============
+# =============================
+# End of 2026 Mihomo 终极旗舰版
+# =============================

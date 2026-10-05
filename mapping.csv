@@ -18,7 +18,7 @@ https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geosite/appl
 https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geosite/anthropic.srs,anthropic.srs,anthropic.srs,e538c597420b88d596364f12f713cfc1
 https://github.com/chisenin/rules-template/raw/refs/heads/main/custom_proxy.json,custom_proxy.json,custom_proxy.json,c5f95b31cc69f90a3d8a62f8332cc2ba
 https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geosite/aliyun@!cn.srs,aliyun@!cn.srs,aliyun@!cn.srs,cb45e581ef623b93a84709759cce76dd
-https://github.com/SagerNet/sing-geosite/raw/refs/heads/rule-set/geosite-geolocation-!cn.srs,geosite-geolocation-!cn.srs,geosite-geolocation-!cn.srs,cc31043ee6179bca012dfd7daddcd213
+https://github.com/SagerNet/sing-geosite/raw/refs/heads/rule-set/geosite-geolocation-!cn.srs,geosite-geolocation-!cn.srs,geosite-geolocation-!cn.srs,2af81daf54196101e17190149929a8ba
 https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geosite/openai.srs,openai.srs,openai.srs,3bc30c465d2f2177a25a3b61acce6b68
 https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geoip/cn.srs,cn.srs,geoip-cn.srs,f8979aa6fb6f700b728b9d95348da560
 https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/sing/geo/geosite/cn.srs,cn.srs,geosite-cn.srs,8175c7bd9f5ffc5523b3baa79763eb4e

@@ -1,17 +1,44 @@
-
-<?xml version="1.0" encoding="utf-8"?>
-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
- "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
-<html>
-  <head>
-    <title>503 Backend.max_conn reached</title>
-  </head>
-  <body>
-    <h1>Error 503 Backend.max_conn reached</h1>
-    <p>Backend.max_conn reached</p>
-    <h3>Error 54113</h3>
-    <p>Details: cache-bur-kbur8200084-BUR 1795443017 718099851</p>
-    <hr>
-    <p>Varnish cache server</p>
-  </body>
-</html>
+{
+	"version": 1,
+	"rules": [
+		{
+			"domain": [
+				"xnxx.com",
+				"xvideos.com",
+				"thismv.com",
+				"thismv.video",
+				"cn.pornhub.com",
+				"sexgps.net",
+				"zh.xhamster.com",
+				"cn.xgroovy.com",
+				"whichav.video",
+				"theporndude.com",
+				"ggjav.com",
+				"m.wyav.tv",
+				"jable.tv",
+				"www.ixxx.com",
+				"anyedh.com"
+			]
+		},
+		{
+			"domain_suffix": [
+				".xnxx.com",
+				".xvideos.com",
+				".thismv.com",
+				".thismv.video",
+				".pornhub.com",
+				".whichav.video",
+				".sexgps.net",
+				".xhamster.com",
+				".xgroovy.com",
+				".whichav.video",
+				".theporndude.com",
+				".ggjav.com",
+				".wyav.tv",
+				".jable.tv",
+				".ixxx.com",
+				".anyedh.com"
+			]
+		}
+	]
+}
